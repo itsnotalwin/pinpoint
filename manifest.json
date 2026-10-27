@@ -1,0 +1,16 @@
+{
+  "name": "Pinpoint — One-Tap Timing",
+  "short_name": "Pinpoint",
+  "description": "Tap to fire a needle into the spinning wheel. Land every shot clear of the others. One thumb, pure timing.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#191322",
+  "background_color": "#191322",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "./icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
