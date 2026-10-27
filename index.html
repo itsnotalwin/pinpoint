@@ -391,6 +391,7 @@ var slowmoT = 0;
 var disc = { theta:0.6, omega:0.5, dir:1, speed:0.5, osc:false, phase:0, pattern:0 };
 var conf = null;
 var paused = false;
+var updateReady = null, updateReadyWasSet = false;
 
 var MAXN = 64;
 var stuckA = new Float32Array(MAXN);
@@ -630,6 +631,10 @@ function onDown(e){
   if(e && e.target && e.target.closest && e.target.closest('button')) return;
   unlockAudio();
   if(paused) return;
+  if(updateReady && (state === ST.menu || (state === ST.over && overT > 0.6))){
+    updateReady.postMessage('SKIP_WAITING');
+    return;
+  }
   if(state === ST.menu){ startRun(); return; }
   if(state === ST.play){ launch(); return; }
   if(state === ST.clearing){ pendingThrow = true; return; }
@@ -1178,7 +1183,26 @@ requestAnimationFrame(frame);
 try{
   if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
     window.addEventListener('load', function(){
-      navigator.serviceWorker.register('./sw.js').catch(function(){});
+      navigator.serviceWorker.register('./sw.js').then(function(reg){
+        if(reg.waiting && navigator.serviceWorker.controller) updateReady = reg.waiting;
+        reg.addEventListener('updatefound', function(){
+          var nw = reg.installing;
+          if(!nw) return;
+          nw.addEventListener('statechange', function(){
+            if(nw.state === 'installed' && navigator.serviceWorker.controller){
+              updateReady = nw;
+              updateReadyWasSet = true;
+            }
+          });
+        });
+        if(updateReady) updateReadyWasSet = true;
+      }).catch(function(){});
+    });
+    navigator.serviceWorker.addEventListener('controllerchange', function(){
+      if(!updateReadyWasSet) return;
+      if(updateReadyWasSet === 'applied') return;
+      updateReadyWasSet = 'applied';
+      location.reload();
     });
   }
 }catch(e){}
