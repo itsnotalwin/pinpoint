@@ -1,8 +1,9 @@
 /* Pinpoint service worker — cache-first app shell */
-var CACHE = 'pinpoint-v1.1.1';
+var CACHE = 'pinpoint-v1.2.1';
 var ASSETS = [
   './',
   './index.html',
+  './config.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -39,6 +40,8 @@ self.addEventListener('fetch', function (e) {
   if (req.headers.has('range')) return;
   var url = new URL(req.url);
   if (url.origin !== location.origin) return;
+  if (url.pathname.indexOf('/rest/') !== -1) return;
+  if (url.search && req.mode !== 'navigate') return;
   e.respondWith(
     caches.match(req).then(function (hit) {
       if (hit) return hit;
