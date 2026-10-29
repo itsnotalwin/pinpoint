@@ -8,6 +8,6 @@
      otherwise installed players keep the old cached config.
 */
 window.PINPOINT_BACKEND = {
-  url: '',
-  key: ''
+  url: 'https://sffpyvxbgmhepftxoesy.supabase.co',
+  key: 'sb_publishable___dIulfnvx74SjfXuyFXZg_LPnlZv7I'
 };
