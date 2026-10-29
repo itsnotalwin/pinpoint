@@ -132,6 +132,61 @@ button.stat:active{transform:scale(.96);background:rgba(244,238,225,.09)}
 #muteBtn .off{display:none}
 #muteBtn.muted .on{display:none}
 #muteBtn.muted .off{display:block}
+
+/* v1.2.8 production layout: preserve brand and separate visual zones. */
+#menu{display:grid;grid-template-rows:auto minmax(0,1fr) auto;
+  justify-content:stretch;align-content:stretch;align-items:stretch;
+  padding:calc(var(--sat) + clamp(48px,8vh,74px)) 20px calc(var(--sab) + clamp(20px,3.5vh,34px))}
+.menuHero{display:flex;flex-direction:column;align-items:center;min-width:0;isolation:isolate}
+#menu .title{font-size:clamp(43px,12.8vw,70px);letter-spacing:-.035em;white-space:nowrap}
+#menu .tagline{margin-top:12px;font-size:clamp(10px,3.1vw,13px);letter-spacing:.36em;text-indent:.36em}
+#menu #wheelTag{margin-top:20px;padding:7px 13px;border:1px solid rgba(255,194,75,.20);
+  border-radius:999px;background:rgba(25,19,34,.48);color:rgba(255,194,75,.85);
+  font-size:11px;letter-spacing:.28em;text-indent:.28em}
+.menuGap{min-height:0;pointer-events:none}
+.menuControls{display:flex;flex-direction:column;align-items:center;gap:14px;min-width:0}
+.menuControls .statbar{margin:0;width:min(340px,86vw);box-shadow:0 8px 24px rgba(0,0,0,.20)}
+.menuControls .stat{min-height:54px;justify-content:center}
+.menuControls #boardBtnMenu{margin:0!important;width:min(340px,86vw)!important;min-height:48px}
+.menuControls .prompt{margin-top:6px;line-height:1.4;font-size:clamp(13px,3.8vw,16px);white-space:nowrap}
+#board{padding-inline:clamp(16px,5vw,28px);scroll-padding-bottom:calc(var(--sab) + 24px)}
+#boardList{min-height:120px;margin-top:12px}
+#boardClose{position:sticky;bottom:0;z-index:2;min-height:48px;background:#292134}
+#identityStatus{overflow-wrap:anywhere;text-wrap:pretty}
+#board details{border-top:1px solid rgba(244,238,225,.12);padding-top:12px}
+#board details input{border-radius:9px!important;font-size:16px}
+#board button:focus-visible, .tabBtn:focus-visible, #menu button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+#muteBtn{width:44px;height:44px;right:calc(12px + env(safe-area-inset-right,0px))}
+@media (max-height:740px) and (max-width:899px){
+  #menu{padding-top:calc(var(--sat) + 38px);padding-bottom:calc(var(--sab) + 14px)}
+  #menu .title{font-size:clamp(39px,11.8vw,55px)}
+  #menu .tagline{margin-top:7px}
+  #menu #wheelTag{margin-top:10px;padding:5px 11px}
+  .menuControls{gap:9px}
+  .menuControls .stat{min-height:45px;padding:6px 4px}
+  .menuControls #boardBtnMenu{min-height:43px}
+  .menuControls .prompt{margin-top:0}
+  #over{padding-top:calc(var(--sat) + 10px);padding-bottom:calc(var(--sab) + 18px)}
+  #over #finalScore{font-size:clamp(64px,17vw,100px)}
+  #over #skinRow{margin-top:10px}
+  #over #retryHint{margin-top:8px}
+}
+@media (min-width:900px) and (min-height:560px){
+  #menu{display:flex;flex-direction:column;align-items:flex-start;
+    padding:clamp(70px,12vh,125px) clamp(48px,6vw,115px) clamp(50px,10vh,100px)}
+  .menuHero,.menuControls{width:min(425px,36vw);align-items:flex-start}
+  #menu .title{font-size:clamp(53px,5.3vw,76px)}
+  #menu .tagline,#menu #wheelTag{text-indent:0}
+  .menuGap{flex:1}
+  .menuControls .statbar,.menuControls #boardBtnMenu{width:100%!important}
+  .menuControls .prompt{text-indent:0}
+  #board{width:min(560px,100vw);left:50%;right:auto;transform:translateX(-50%)}
+  #board.hidden{transform:translateX(-50%) scale(1.02)}
+}
+@media (prefers-reduced-motion:reduce){
+  .screen,.screen.hidden,.btn,.tabBtn,.stat,.prompt{animation:none!important;transition:none!important}
+}
+
 noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--cream)}
 </style>
 </head>
@@ -140,18 +195,21 @@ noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:
 <div id="safeprobe"></div>
 
 <div id="menu" class="screen">
-  <h1 class="title">PINP<span class="o">O</span>INT</h1>
-  <div class="tagline">TIME THE THROW</div>
-  <div id="wheelTag">WHEEL #1</div>
-  <div class="spacer"></div>
-  <div class="statbar">
-    <button class="stat" id="statBest"><span class="k">BEST</span><span class="v" id="mBest">0</span></button>
-    <button class="stat" id="statToday" style="display:none"><span class="k">TODAY</span><span class="v coral" id="mDaily">0</span></button>
-    <button class="stat" id="statStreak" style="display:none"><span class="k">STREAK</span><span class="v" id="mStreak">2</span></button>
+  <div class="menuHero">
+    <h1 class="title">PINP<span class="o">O</span>INT</h1>
+    <div class="tagline">TIME THE THROW</div>
+    <div id="wheelTag">WHEEL #1</div>
   </div>
-  <button class="btn" id="boardBtnMenu" style="display:none;margin-top:14px;width:min(340px,86vw)">LEADERBOARD</button>
-  <div style="height:22px"></div>
-  <div class="prompt">TAP TO START</div>
+  <div class="menuGap" aria-hidden="true"></div>
+  <div class="menuControls">
+    <div class="statbar">
+      <button class="stat" id="statBest"><span class="k">BEST</span><span class="v" id="mBest">0</span></button>
+      <button class="stat" id="statToday" style="display:none"><span class="k">TODAY</span><span class="v coral" id="mDaily">0</span></button>
+      <button class="stat" id="statStreak" style="display:none"><span class="k">STREAK</span><span class="v" id="mStreak">2</span></button>
+    </div>
+    <button class="btn" id="boardBtnMenu" style="display:none">LEADERBOARD</button>
+    <div class="prompt">TAP TO START</div>
+  </div>
 </div>
 
 <div id="board" class="screen hidden">
@@ -520,6 +578,28 @@ function resize(){
   CX = W / 2;
   CY = top + (bot - top) * 0.42;
   throwY = bot;
+  // Menu-only geometry respects the actual header and controls on each viewport.
+  // Gameplay and its hitboxes keep their existing layout and deterministic timing.
+  if(state === ST.menu){
+    if(W >= 900 && H >= 560){
+      CX = W * 0.69;
+      CY = H * 0.52;
+      R = Math.min(H * 0.285, W * 0.185, 245);
+      throwY = H * 0.88;
+    }else{
+      var menuHeader = document.querySelector('.menuHero');
+      var menuFooter = document.querySelector('.menuControls');
+      if(menuHeader && menuFooter){
+        var menuTop = Math.max(safeT + 90, menuHeader.getBoundingClientRect().bottom + 22);
+        var menuBottom = Math.min(H - safeB - 28, menuFooter.getBoundingClientRect().top - 20);
+        var available = Math.max(80, menuBottom - menuTop);
+        CX = W / 2;
+        CY = (menuTop + menuBottom) / 2;
+        R = Math.min(W * 0.30, available * 0.335);
+        throwY = menuBottom;
+      }
+    }
+  }
   stickLen = 26 * K;
   arcR = R + 44 * K;
   collideA = (needleW * 0.85) / R;
@@ -848,6 +928,7 @@ function startRun(){
   state = ST.play;
   elMenu.classList.add('hidden');
   elOver.classList.add('hidden');
+  resize();
   popup('GO!', CX, CY, 38 * K, COL.cream, 0.6);
   sfxUI(); buzz(10);
 }
