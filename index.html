@@ -149,7 +149,18 @@ noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:
 
 <div id="board" class="screen hidden">
   <div class="boardTitle">LEADERBOARD</div>
-  <div class="nameRow">PLAYING AS <input id="nameInput" maxlength="12" spellcheck="false" autocomplete="off"></div>
+  <div class="nameRow">PLAYING AS <input id="nameInput" maxlength="12" spellcheck="false" autocomplete="off" aria-label="Claim or change player name"></div>
+  <div id="identityStatus" style="font-size:11px;line-height:1.6;color:var(--cream);opacity:.8;margin:8px auto 12px;max-width:340px" role="status" aria-live="polite">Connecting player account...</div>
+  <button id="claimName" class="btn" style="width:min(340px,86vw);margin:3px auto 8px">CLAIM / UPDATE NAME</button>
+  <details style="width:min(340px,86vw);margin:0 auto 12px;color:var(--cream);font-size:12px;line-height:1.6">
+    <summary style="cursor:pointer">ACCOUNT RECOVERY (OPTIONAL)</summary>
+    <p>Link an email to restore your player on a different device. Verify the email we send you. Do this before clearing app data.</p>
+    <input id="identityEmail" type="email" placeholder="you@example.com" autocomplete="email" style="width:100%;padding:10px;background:transparent;color:inherit;border:1px solid currentColor;border-radius:4px">
+    <button id="identityLink" class="btn" style="margin:8px 0">LINK EMAIL</button>
+    <button id="identityRecover" class="btn" style="margin:8px 0">RECOVER EXISTING ACCOUNT</button>
+    <input id="identityOtp" inputmode="numeric" placeholder="Email confirmation code (if sent)" style="width:100%;padding:10px;background:transparent;color:inherit;border:1px solid currentColor;border-radius:4px">
+    <button id="identityVerify" class="btn" style="margin:8px 0">VERIFY CODE</button>
+  </details>
   <div class="tabs">
     <button class="tabBtn sel" id="tabDay">TODAY</button>
     <button class="tabBtn" id="tabAll">ALL-TIME</button>
@@ -186,6 +197,7 @@ noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:
 <noscript>Pinpoint needs JavaScript enabled.</noscript>
 
 <script src="./config.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.0/dist/umd/supabase.js"></script>
 
 <script>
 (function(){
@@ -253,99 +265,145 @@ var skin = SKINS[skinIdx];
 var BE = window.PINPOINT_BACKEND || {};
 var beOn = !!(BE.url && BE.key);
 var boardOpen = false;
-function beHeaders(){
-  var headers = { 'apikey': BE.key, 'Content-Type': 'application/json' };
-  // Publishable keys are API keys, not JWTs. Legacy anon JWT keys still use Bearer.
-  if(BE.key.indexOf('sb_publishable_') !== 0) headers.Authorization = 'Bearer ' + BE.key;
-  return headers;
-}
-function uuid(){
-  try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
-  return 'p-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
-}
+var sb = null, authReady = false, profileReady = false, identityProfile = null;
+var identityStatus = document.getElementById('identityStatus');
+function identityMessage(m){ identityStatus.textContent = m; }
+function sanitizeName(v){ return String(v || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,12); }
+function uuid(){ try{ return crypto.randomUUID(); }catch(e){ return 'local-' + Date.now(); } }
 var player = store_get('pp_player', null);
 if(!player || !player.id){
-  var NAME_A = ['TITAN', 'GHOST', 'PILOT', 'NOVA', 'VIPER', 'RUNE', 'KOI', 'JET', 'ECHO', 'ONI', 'FLUX', 'DART'];
-  player = { id: uuid(), name: NAME_A[Math.floor(Math.random() * NAME_A.length)] + '-' + (100 + Math.floor(Math.random() * 900)) };
-  store_set('pp_player', player);
+  var NAME_A = ['TITAN','GHOST','PILOT','NOVA','VIPER','RUNE','KOI','JET','ECHO','ONI','FLUX','DART'];
+  player = { id: uuid(), name: NAME_A[Math.floor(Math.random()*NAME_A.length)] + '-' + (100+Math.floor(Math.random()*900)) };
+  store_set('pp_player',player);
 }
-function sanitizeName(v){
-  var s = String(v || '').toUpperCase().replace(/[^A-Z0-9\-_]/g, '').slice(0, 12);
-  return s || 'GUEST';
+function apiErr(error){ return error && (error.message || error.error_description) || 'Connection failed'; }
+function displayProfile(p){
+  identityProfile = p; profileReady = !!p;
+  if(p){
+    player.id = p.id; player.name = p.name; store_set('pp_player',player);
+    document.getElementById('nameInput').value = p.name;
+    var until = Date.parse(p.renamed_at) + 30*86400000;
+    identityMessage('CLAIMED: ' + p.name + ' · NEXT RENAME: ' + new Date(until).toLocaleDateString());
+    flushQueue();
+  }else identityMessage('CLAIM A UNIQUE NAME TO JOIN THE ONLINE LEADERBOARD. OFFLINE PLAY STILL WORKS.');
+}
+async function identityInit(){
+  if(!beOn){ identityMessage('OFFLINE PROFILE ONLY'); return; }
+  if(!window.supabase || !window.supabase.createClient){ identityMessage('AUTH CLIENT UNAVAILABLE; OFFLINE PLAY WORKS.'); return; }
+  try{
+    sb = window.supabase.createClient(BE.url,BE.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+    var sessionResult = await sb.auth.getSession();
+    var session = sessionResult.data && sessionResult.data.session;
+    if(!session){ var a = await sb.auth.signInAnonymously(); if(a.error) throw a.error; }
+    authReady = true;
+    var current = await sb.from('pinpoint_profiles').select('id,name,renamed_at').maybeSingle();
+    if(current.error) throw current.error;
+    if(current.data){ displayProfile(current.data); }
+    else { displayProfile(null); document.getElementById('nameInput').value = sanitizeName(player.name); }
+    sb.auth.onAuthStateChange(function(ev){
+      if(ev === 'SIGNED_OUT'){ authReady=false; profileReady=false; identityMessage('SIGNED OUT. RELOAD TO RESUME.'); }
+    });
+  }catch(e){ authReady=false; profileReady=false; identityMessage('ONLINE IDENTITY UNAVAILABLE: '+apiErr(e)); }
+}
+async function claimName(){
+  if(!sb || !authReady){ identityMessage('WAIT FOR AUTHENTICATION OR RETRY ONLINE.'); return; }
+  var name=sanitizeName(document.getElementById('nameInput').value);
+  if(name.length<3){ identityMessage('NAME MUST BE 3–12 LETTERS, DIGITS, _ OR -.'); return; }
+  identityMessage('CHECKING NAME...');
+  var r=await sb.rpc('claim_pinpoint_name',{requested:name});
+  if(r.error){identityMessage(apiErr(r.error).replaceAll('_',' '));return;}
+  var p=r.data && r.data[0];
+  if(p) displayProfile({id:p.player_id,name:p.player_name,renamed_at:p.renamed_at});
+}
+async function identityLinkEmail(){
+  if(!sb || !authReady){identityMessage('SIGN IN FIRST.');return;}
+  var email=document.getElementById('identityEmail').value.trim();
+  if(!email){identityMessage('ENTER AN EMAIL.');return;}
+  var r=await sb.auth.updateUser({email:email},{emailRedirectTo:location.origin+location.pathname});
+  identityMessage(r.error ? apiErr(r.error) : 'CHECK YOUR EMAIL TO VERIFY RECOVERY. KEEP THIS BROWSER UNTIL CONFIRMED.');
+}
+async function identityRecover(){
+  if(!sb){identityMessage('AUTH UNAVAILABLE.');return;}
+  var email=document.getElementById('identityEmail').value.trim();
+  if(!email){identityMessage('ENTER YOUR LINKED EMAIL.');return;}
+  var r=await sb.auth.signInWithOtp({email:email,options:{shouldCreateUser:false,emailRedirectTo:location.origin+location.pathname}});
+  identityMessage(r.error ? apiErr(r.error) : 'CHECK EMAIL FOR SIGN-IN LINK / CODE. YOUR CURRENT LOCAL SESSION MAY BE REPLACED.');
+}
+async function identityVerify(){
+  if(!sb){identityMessage('AUTH UNAVAILABLE.');return;}
+  var email=document.getElementById('identityEmail').value.trim();
+  var token=document.getElementById('identityOtp').value.trim();
+  var r=await sb.auth.verifyOtp({email:email,token:token,type:'email'});
+  if(r.error){identityMessage(apiErr(r.error));return;}
+  authReady=true;
+  var p=await sb.from('pinpoint_profiles').select('id,name,renamed_at').maybeSingle();
+  if(p.error){identityMessage(apiErr(p.error));return;}
+  displayProfile(p.data);
 }
 var submitQueue = store_get('pp_queue', []);
 function queueSubmit(row){
   if(!beOn || row.score <= 0) return;
   submitQueue.push(row);
   if(submitQueue.length > 20) submitQueue.shift();
-  store_set('pp_queue', submitQueue);
+  store_set('pp_queue',submitQueue);
   flushQueue();
 }
 var flushing = false;
-function flushQueue(){
-  if(!beOn || flushing || !submitQueue.length) return;
-  flushing = true;
-  var batch = submitQueue.slice(0, 20);
-  fetch(BE.url + '/rest/v1/scores', {
-    method: 'POST',
-    headers: beHeaders(),
-    body: JSON.stringify(batch)
-  }).then(function(r){
-    if(r.ok || r.status === 201){
-      submitQueue.splice(0, batch.length);
-      store_set('pp_queue', submitQueue);
-    }
-    flushing = false;
-  }).catch(function(){ flushing = false; });
+async function flushQueue(){
+  if(!sb || !profileReady || flushing || !submitQueue.length)return;
+  flushing=true;
+  try{
+    // Legacy offline rows were not authenticated and must never be attributed to a new player.
+    var eligible=submitQueue.filter(function(r){return r.player_id===player.id && r.authenticated===true;});
+    var oldCount=submitQueue.length;
+    submitQueue=eligible;
+    if(oldCount!==eligible.length)store_set('pp_queue',submitQueue);
+    if(!eligible.length)return;
+    var batch=eligible.slice(0,20).map(function(r){return {player_id:player.id,score:r.score,day_key:r.day_key,duration_ms:r.duration_ms,taps:r.taps};});
+    var result=await sb.from('scores').insert(batch);
+    if(result.error)throw result.error;
+    submitQueue.splice(0,batch.length);
+    store_set('pp_queue',submitQueue);
+  }catch(e){ console.warn('Pinpoint score retry pending:',apiErr(e)); }
+  finally{flushing=false;}
 }
-window.addEventListener('online', flushQueue);
-function beGet(qs){
-  return fetch(BE.url + '/rest/v1/scores?' + qs, {
-    headers: Object.assign(beHeaders(), { 'Prefer': 'count=exact' })
-  }).then(function(r){
-    var range = r.headers.get('content-range') || '';
-    var total = range.indexOf('/') >= 0 ? parseInt(range.split('/')[1], 10) || 0 : 0;
-    return r.json().then(function(rows){ return { rows: rows, total: total }; });
-  });
+window.addEventListener('online',flushQueue);
+async function beGet(qs){
+  // Public GET is read-only, and the database RLS filters unverified legacy scores.
+  var headers={'apikey':BE.key,'Prefer':'count=exact'};
+  var res=await fetch(BE.url+'/rest/v1/scores?'+qs,{headers:headers});
+  if(!res.ok)throw new Error('Leaderboard HTTP '+res.status);
+  var range=res.headers.get('content-range')||'';
+  var total=range.indexOf('/')>=0 ? parseInt(range.split('/')[1],10)||0:0;
+  return {rows:await res.json(),total:total};
 }
 var myDailyRank = 0, myAllRank = 0;
 var rival = null;
 function loadRival(){
-  var r = store_get('pp_rival', null);
-  if(r && r.d === dayKey && r.taps && r.taps.length){ rival = r; return; }
-  var sg = store_get('pp_selfghost', null);
+  var r=store_get('pp_rival',null);
+  if(r && r.d===dayKey && r.taps && r.taps.length){rival=r;return;}
+  var sg=store_get('pp_selfghost',null);
   if(sg && sg.taps && sg.taps.length){
-    rival = { self: true, name: 'YOUR BEST', score: sg.score, taps: String(sg.taps).split(',').map(Number).filter(function(n){ return n > 0; }) };
-    return;
+    rival={self:true,name:'YOUR BEST',score:sg.score,taps:String(sg.taps).split(',').map(Number).filter(function(n){return n>0;})};return;
   }
-  rival = null;
+  rival=null;
 }
-function submitRun(){
-  if(!beOn) return Promise.resolve();
-  queueSubmit({
-    player_id: player.id,
-    name: player.name,
-    score: score,
-    day_key: dayKey,
-    duration_ms: Math.max(1000, Math.round(runT * 1000)),
-    taps: tapsRec.join(',')
-  });
-  var myDailyRow = null;
-  return beGet('select=player_id,name,score,taps&day_key=eq.' + dayKey + '&order=score.desc,created_at.asc&limit=50').then(function(d){
-    var rows = d.rows;
-    var myIdx = -1;
-    for(var i = 0; i < rows.length; i++){ if(rows[i].player_id === player.id){ myIdx = i; break; } }
-    myDailyRank = myIdx >= 0 ? myIdx + 1 : d.total + 1;
-    if(myIdx > 0) rival = { d: dayKey, name: rows[myIdx - 1].name, score: rows[myIdx - 1].score, taps: String(rows[myIdx - 1].taps || '').split(',').map(Number).filter(function(n){ return n > 0; }) };
-    else if(myIdx === 0) rival = null;
-    else if(rows.length) rival = { d: dayKey, name: rows[rows.length - 1].name, score: rows[rows.length - 1].score, taps: String(rows[rows.length - 1].taps || '').split(',').map(Number).filter(function(n){ return n > 0; }) };
-    if(rival) store_set('pp_rival', rival);
-    return beGet('select=player_id,score&order=score.desc,created_at.asc&limit=1').then(function(a){
-      var allIdx = -1;
-      for(var j = 0; j < a.rows.length; j++){ if(a.rows[j].player_id === player.id){ allIdx = j; break; } }
-      myAllRank = allIdx >= 0 ? allIdx + 1 : a.total + 1;
-    });
-  }).catch(function(){});
+async function submitRun(){
+  if(!beOn || !profileReady)return;
+  queueSubmit({player_id:player.id,authenticated:true,score:score,day_key:dayKey,duration_ms:Math.max(1000,Math.round(runT*1000)),taps:tapsRec.join(',')});
+  await flushQueue();
+  try{
+    var d=await beGet('select=player_id,name,score,taps&day_key=eq.'+dayKey+'&order=score.desc,created_at.asc&limit=50');
+    var rows=d.rows, myIdx=-1;
+    for(var i=0;i<rows.length;i++){if(rows[i].player_id===player.id){myIdx=i;break;}}
+    myDailyRank=myIdx>=0?myIdx+1:0;
+    if(myIdx>0)rival={d:dayKey,name:rows[myIdx-1].name,score:rows[myIdx-1].score,taps:String(rows[myIdx-1].taps||'').split(',').map(Number).filter(function(n){return n>0;})};
+    else if(myIdx<0 && rows.length)rival={d:dayKey,name:rows[rows.length-1].name,score:rows[rows.length-1].score,taps:String(rows[rows.length-1].taps||'').split(',').map(Number).filter(function(n){return n>0;})};
+    else rival=null;
+    if(rival)store_set('pp_rival',rival);
+    var a=await beGet('select=player_id,score&order=score.desc,created_at.asc&limit=50');
+    myAllRank=a.rows.findIndex(function(row){return row.player_id===player.id;})+1;
+  }catch(e){console.warn('Leaderboard unavailable:',apiErr(e));}
 }
 /* ghost rival replay */
 var ghost = null, ghostFlies = [];
@@ -1436,6 +1494,11 @@ document.getElementById('statStreak').style.display = streak.count >= 2 ? '' : '
 elWheelTag.textContent = 'WHEEL #' + wheelNum;
 elBoardBtnMenu.style.display = beOn ? '' : 'none';
 elNameInput.value = player.name;
+document.getElementById('claimName').addEventListener('click',claimName);
+document.getElementById('identityLink').addEventListener('click',identityLinkEmail);
+document.getElementById('identityRecover').addEventListener('click',identityRecover);
+document.getElementById('identityVerify').addEventListener('click',identityVerify);
+window.addEventListener('load',identityInit);
 setMuteIcon();
 
 function renderBoard(){
@@ -1507,9 +1570,7 @@ elBoardClose.addEventListener('pointerdown', function(e){ e.stopPropagation(); c
 elTabDay.addEventListener('pointerdown', function(e){ e.stopPropagation(); boardTab = 'day'; elTabDay.classList.add('sel'); elTabAll.classList.remove('sel'); renderBoard(); fetchBoard('day'); });
 elTabAll.addEventListener('pointerdown', function(e){ e.stopPropagation(); boardTab = 'all'; elTabAll.classList.add('sel'); elTabDay.classList.remove('sel'); renderBoard(); fetchBoard('all'); });
 elNameInput.addEventListener('change', function(){
-  player.name = sanitizeName(elNameInput.value);
-  elNameInput.value = player.name;
-  store_set('pp_player', player);
+  claimName();
 });
 
 var toastTimer = null;
