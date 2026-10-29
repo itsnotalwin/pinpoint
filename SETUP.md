@@ -117,3 +117,12 @@ Fixed on `main` in `pinpoint-v1.2.6`: the board overlay previously blocked point
 
 ### Error: WAIT FOR AUTHENTICATION OR RETRY ONLINE
 A real failure was verified on 2026-10-30: Supabase Auth was returning HTTP 422 `anonymous_provider_disabled` on `POST /signup`. In the dedicated **Pinpoint** project, open [Authentication Providers](https://supabase.com/dashboard/project/sffpyvxbgmhepftxoesy/auth/providers), enable **Anonymous Sign-Ins** and save. This is **not** the anon/publishable API key or Email provider. With `pinpoint-v1.2.7` the name-claim button retries authentication and reports the real reason instead of a generic wait message. Existing local scores do not need to be deleted. No new verified scores or accounts existed when this failure was diagnosed.
+
+
+## Unique real-player leaderboard and optional ghost replay (v1.2.9)
+
+**Apply the database migration** [pinpoint-leaderboards.sql](./pinpoint-leaderboards.sql) when provisioning an additional Supabase project. It is already installed on the dedicated Pinpoint project as migration `pinpoint_unique_player_leaderboards`. The migration adds two `security_invoker=true` read-only views over `public.scores`: `pinpoint_daily_bests` and `pinpoint_alltime_bests`, each showing only the best run from each real player. The historical runs and replay tap timelines are preserved. A score submitted by a real player is not a ghost score; replay ghosts never insert their own score rows.
+
+The game menu and leaderboard both have `GHOSTS · ON/OFF`. This stores the boolean `pp_ghosts_enabled` on the device. OFF stops rival/self ghost replay and callouts, but never hides or rejects a real player's scores. Turning ON restores the most recently recorded valid opponent replay or a self-best replay. The switch does **not** opt a player out of having their submitted public tap timeline replayed by others. Confirm this privacy design before adding a separate visibility setting.
+
+**QA:** Play multiple times on one account and at least once on a second account. Both daily and all-time boards must show one line per player. Confirm that toggling ghost replays OFF leaves ranking unchanged and no ghost pins appear next run, while ON loads a replay where available. Restart/reopen the PWA to verify persistence. Actual live multi-device visual testing is still pending. See [GHOST-LEADERBOARD-AUDIT.md](./GHOST-LEADERBOARD-AUDIT.md).
