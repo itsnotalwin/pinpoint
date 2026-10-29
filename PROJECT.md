@@ -5,7 +5,7 @@ A mobile-friendly one-tap timing game and installable, offline-capable PWA, with
 
 ## Architecture
 - `index.html`: self-contained UI, deterministic game loop, player identity, score REST calls, ghost replay.
-- `config.js`: public Supabase project URL + publishable API key (currently **not configured**).
+- `config.js`: public Supabase project URL + publishable API key (**configured** with dedicated Pinpoint Supabase public URL and publishable key).
 - `supabase-setup.sql`: leaderboard table, indexes, RLS and anonymous read/insert grants.
 - `sw.js`: cache-first app shell; increase cache version when app files change.
 - `manifest.json`, icon files: PWA installation.
@@ -19,11 +19,11 @@ Open via HTTPS on a static web host (GitHub Pages branch `main`, root; see `READ
 ## Current verified state
 - Source on `main` inspected 2026-10-29. The multiplayer client, setup guide, and SQL schema exist.
 - Commit `77427b971f9ce262e984bc67a2c801f677a51f09` finalized publishable-key header compatibility, explicit anon grants, setup documentation, and PWA cache `pinpoint-v1.2.3`. Changes were verified by remote file reads.
-- No dedicated Pinpoint Supabase project was found in the connected account as of 2026-10-29. `config.js` remains blank. **Online multiplayer is not configured or end-to-end tested.**
+- Dedicated Supabase project `sffpyvxbgmhepftxoesy` was created in `itsnotalwin's Org` on 2026-10-29 (eu-west-1; quoted $0/month). Scores schema migration succeeded, RLS/read/insert/sequence permissions verified, and security advisors returned no findings. `config.js` is connected and `sw.js` is `pinpoint-v1.2.4`. **Live browser, score submission, and two-player ghost testing remain unverified.**
 - GitHub Pages/browser deployment has not been verified in this setup session.
 
 ## Next action
-Select/confirm the Supabase organization for a new dedicated Pinpoint project, create it if approved, initialize SQL, configure its public URL/publishable key, bump the PWA cache, then complete two-player and offline-retry checks.
+Verify GitHub Pages publishes `main`, then complete real browser score submission, two-player leaderboard/ghost checks, offline retry and daily reset behavior.
 
 ## Future hardening
 Public, unauthenticated submissions are vulnerable to fake scores despite numeric sanity limits. Consider server-side replay validation and rate limits before competitive/public launch. Displayed rank calculation should also be audited for players outside the top results.
