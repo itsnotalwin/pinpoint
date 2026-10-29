@@ -117,6 +117,7 @@ noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:
   <div class="chipRow">
     <div class="chip gold" id="mBest">BEST 0</div>
     <div class="chip coral2" id="mDaily" style="display:none">TODAY 0</div>
+    <div class="chip gold" id="mStreak" style="display:none">STREAK 2</div>
     <button class="chipBtn" id="boardBtnMenu" style="display:none">BOARD</button>
   </div>
   <div style="height:22px"></div>
@@ -148,6 +149,7 @@ noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:
   <div id="rankLine" style="display:none"></div>
   <div id="rivalLine" style="display:none"></div>
   <button id="boardBtn" class="chipBtn" style="display:none">LEADERBOARD</button>
+  <button id="shareBtn" class="chipBtn">SHARE SCORE</button>
   <div class="prompt" id="retryHint">TAP TO RETRY</div>
 </div>
 
@@ -189,12 +191,12 @@ var SKINS = [
   { name:'MINT',    need:25,  disc:'#8FE3C0', rod:'#241B33', out:'#F4EEE1', pom:'#FF4E6A', dark:false },
   { name:'BUBBLE',  need:50,  disc:'#FF9FB8', rod:'#241B33', out:'#F4EEE1', pom:'#FFC24B', dark:false },
   { name:'ECLIPSE', need:75,  disc:'#39305A', rod:'#F4EEE1', out:'#241B33', pom:'#FF4E6A', dark:true  },
-  { name:'GILDED',  need:150, disc:'#FFC24B', rod:'#241B33', out:'#F4EEE1', pom:'#F4EEE1', dark:false }
+  { name:'GILDED',  need:150, disc:'#FFC24B', rod:'#241B33', out:'#F4EEE1', pom:'#F4EEE1', dark:false },
+  { name:'BLOODMOON', need:-1, streakNeed:7, disc:'#3A1F2B', rod:'#F4EEE1', out:'#241B33', pom:'#FFC24B', dark:true }
 ];
 var best = store_get('pp_best', 0);
 var skinIdx = store_get('pp_skin', 0);
-if(skinIdx < 0 || skinIdx >= SKINS.length || best < SKINS[skinIdx].need) skinIdx = 0;
-var skin = SKINS[skinIdx];
+var streak = store_get('pp_streak', { last: 0, count: 0 });
 var muted = store_get('pp_mute', false);
 
 function mulberry32(a){
@@ -210,6 +212,17 @@ var wheelNum = Math.floor((Date.now() - new Date(2026, 0, 1).getTime()) / 864000
 var dailyStore = store_get('pp_daily', null);
 var dailyBest = (dailyStore && dailyStore.d === dayKey) ? dailyStore.b : 0;
 var dailyBestFlag = false;
+
+/* daily play streak + skin selection (needs dayKey) */
+if(streak.last !== dayKey){
+  var yd = new Date(Date.now() - 86400000);
+  streak.count = (streak.last === yd.getFullYear() * 10000 + (yd.getMonth() + 1) * 100 + yd.getDate()) ? streak.count + 1 : 1;
+  streak.last = dayKey;
+  store_set('pp_streak', streak);
+}
+function skinUnlocked(s){ return best >= s.need || (s.streakNeed && streak.count >= s.streakNeed); }
+if(skinIdx < 0 || skinIdx >= SKINS.length || !skinUnlocked(SKINS[skinIdx])) skinIdx = 0;
+var skin = SKINS[skinIdx];
 
 /* ============ backend / leaderboards (Supabase REST, no SDK) ============ */
 var BE = window.PINPOINT_BACKEND || {};
@@ -271,7 +284,13 @@ var myDailyRank = 0, myAllRank = 0;
 var rival = null;
 function loadRival(){
   var r = store_get('pp_rival', null);
-  rival = (r && r.d === dayKey && r.taps && r.taps.length) ? r : null;
+  if(r && r.d === dayKey && r.taps && r.taps.length){ rival = r; return; }
+  var sg = store_get('pp_selfghost', null);
+  if(sg && sg.taps && sg.taps.length){
+    rival = { self: true, name: 'YOUR BEST', score: sg.score, taps: String(sg.taps).split(',').map(Number).filter(function(n){ return n > 0; }) };
+    return;
+  }
+  rival = null;
 }
 function submitRun(){
   if(!beOn) return Promise.resolve();
@@ -305,7 +324,7 @@ var ghost = null, ghostFlies = [];
 function ghostInit(){
   ghostFlies.length = 0;
   if(!rival || !rival.taps || !rival.taps.length){ ghost = null; return; }
-  ghost = { alive: true, taps: rival.taps, idx: 0, stuck: [], n: 0, stage: 1, conf: stageConf(1), pinsStage: 0, done: false, name: rival.name, score: rival.score };
+  ghost = { alive: true, self: !!rival.self, taps: rival.taps, idx: 0, stuck: [], n: 0, stage: 1, conf: stageConf(1), pinsStage: 0, done: false, name: rival.name, score: rival.score };
 }
 function ghostStep(){
   if(!ghost || ghost.done) return;
@@ -322,7 +341,7 @@ function ghostStep(){
   }
   if(ghost.idx >= ghost.taps.length && !ghostFlies.length){
     ghost.done = true;
-    if(ghost.alive) popup('RIVAL FINISHED', CX, CY + Reff + 44 * K, 15 * K, 'rgba(255,194,75,0.75)', 0.9);
+    if(ghost.alive) popup(ghost.self ? 'REPLAY DONE' : 'RIVAL FINISHED', CX, CY + Reff + 44 * K, 15 * K, 'rgba(255,194,75,0.75)', 0.9);
   }
 }
 function ghostLand(){
@@ -335,7 +354,7 @@ function ghostLand(){
   }
   if(ghost.n > 0 && minD < collideA){
     ghost.alive = false; ghost.done = true;
-    popup('RIVAL OUT', CX, CY + Reff + 44 * K, 15 * K, 'rgba(255,78,106,0.8)', 0.9);
+    popup(ghost.self ? 'PAST YOUR BEST!' : 'RIVAL OUT', CX, CY + Reff + 44 * K, 15 * K, ghost.self ? 'rgba(255,194,75,0.85)' : 'rgba(255,78,106,0.8)', 0.9);
     return;
   }
   if(ghost.n < 64) ghost.stuck[ghost.n++] = phi;
@@ -358,6 +377,17 @@ var R = 100, CX = 0, CY = 0, throwY = 0, arcR = 0, needleW = 9, collideA = 0.07,
 var NEAR_A = 0.30;
 var FLIGHT = 0.095, THROW_CD = 0.07, MAX_AIR = 3;
 var vg = document.createElement('canvas');
+var auraCv = document.createElement('canvas');
+auraCv.width = 256; auraCv.height = 256;
+(function(){
+  var ac = auraCv.getContext('2d');
+  var gr = ac.createRadialGradient(128, 128, 10, 128, 128, 128);
+  gr.addColorStop(0, 'rgba(255,194,75,0.16)');
+  gr.addColorStop(0.55, 'rgba(255,78,106,0.08)');
+  gr.addColorStop(1, 'rgba(255,78,106,0)');
+  ac.fillStyle = gr;
+  ac.fillRect(0, 0, 256, 256);
+})();
 
 function resize(){
   W = window.innerWidth; H = window.innerHeight;
@@ -619,8 +649,11 @@ function applyStage(n){
   pinsStage = 0;
 }
 
-function shake(a){ shakeA = Math.min(shakeA + a * K, 16); }
-function zoom(k){ zoomK = Math.min(zoomK + k, 0.14); }
+var reduceMotion = false;
+try{ reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+
+function shake(a){ if(reduceMotion) return; shakeA = Math.min(shakeA + a * K, 16); }
+function zoom(k){ if(reduceMotion) return; zoomK = Math.min(zoomK + k, 0.14); }
 
 /* ============ scoring ============ */
 function addScore(n){
@@ -631,6 +664,7 @@ function addScore(n){
 function celebrate(m){
   popup(String(m), CX, CY - 10, Math.min(40 + m * 1.2, 56) * K, COL.gold, 0.9);
   ring(CX, CY, R * 1.5, COL.gold, 0.45);
+  sparks(CX, CY, 10, COL.gold);
   confettiBurst(CX, CY, 16);
   sfxMilestone(); buzz([10, 30, 14]); shake(6); zoom(0.05); goldFlash = 0.45;
 }
@@ -713,10 +747,12 @@ function die(phi){
   state = ST.dying;
   deathT = 0;
   freezeT = 0.06;
-  slowmoT = 0.55;
+  if(!reduceMotion) slowmoT = 0.55;
   intruderPhi = phi;
+  var prevBest = best;
   isNewBestRun = best > 0 && score > best;
   if(score > best){ best = score; store_set('pp_best', best); }
+  if(score > prevBest) store_set('pp_selfghost', { score: score, taps: tapsRec.join(',') });
   if(score > dailyBest){ dailyBest = score; store_set('pp_daily', { d: dayKey, b: dailyBest }); }
   sfxDeath(); buzz([50, 30, 90]);
   shake(14); zoom(0.1); redFlash = 1;
@@ -1012,6 +1048,15 @@ function drawDisc(){
   g.rotate(th);
   g.beginPath(); g.arc(0, 0, Reff, 0, TAU);
   g.fillStyle = skin.disc; g.fill();
+  g.globalAlpha = skin.dark ? 0.12 : 0.08;
+  g.strokeStyle = skin.dark ? COL.cream : COL.ink;
+  g.lineWidth = Reff * 0.22;
+  g.beginPath(); g.arc(0, 0, Reff * 0.88, 0, TAU); g.stroke();
+  g.globalAlpha = 0.10;
+  g.strokeStyle = COL.cream;
+  g.lineWidth = 5 * K;
+  g.beginPath(); g.arc(0, 0, Reff * 0.86, -2.4, -0.9); g.stroke();
+  g.globalAlpha = 1;
   drawPattern();
   g.lineWidth = 3 * K;
   g.strokeStyle = skin.dark ? COL.rimLight : COL.rimDark;
@@ -1182,17 +1227,23 @@ function render(){
   g.fillRect(0, 0, W, H);
   g.drawImage(vg, 0, 0, W, H);
   g.fillStyle = 'rgba(244,238,225,0.05)';
-  for(var i = 0; i < DUSTN; i++){
+  for(var di4 = 0; di4 < DUSTN; di4++){
+    g.globalAlpha = dust[di4].a;
     g.beginPath();
-    g.arc(dust[i].x, dust[i].y, dust[i].s, 0, TAU);
+    g.arc(dust[di4].x, dust[di4].y, dust[di4].s, 0, TAU);
     g.fill();
   }
+  g.globalAlpha = 1;
   var sx = Math.sin(tGlobal * 47) * shakeA, sy = Math.cos(tGlobal * 39) * shakeA;
   var zoomS = 1 + zoomK;
   g.save();
   g.translate(CX + sx, CY + sy);
   g.scale(zoomS, zoomS);
   g.translate(-CX, -CY);
+  var asize = R * 3.1 * (1 + 0.05 * Math.sin(tGlobal * 0.3));
+  g.globalAlpha = reduceMotion ? 0.8 : 0.75 + 0.25 * Math.sin(tGlobal * 0.4);
+  g.drawImage(auraCv, CX - asize / 2 + Math.sin(tGlobal * 0.35) * R * 0.12, CY - asize / 2 + Math.cos(tGlobal * 0.27) * R * 0.12, asize, asize);
+  g.globalAlpha = 1;
   drawArc();
   var discVisible = state === ST.menu || state === ST.play || (state === ST.clearing && stageApplied) || state === ST.dying;
   if(discVisible) drawDisc();
@@ -1274,6 +1325,8 @@ var elTabDay = document.getElementById('tabDay');
 var elTabAll = document.getElementById('tabAll');
 var elBoardClose = document.getElementById('boardClose');
 var elNameInput = document.getElementById('nameInput');
+var elShareBtn = document.getElementById('shareBtn');
+var elMStreak = document.getElementById('mStreak');
 var boardTab = 'day', boardDay = [], boardAll = [];
 
 var hintTimer = null;
@@ -1283,24 +1336,21 @@ function buildSkinRow(){
     (function(idx){
       var s = SKINS[idx];
       var b = document.createElement('button');
-      b.className = 'skindot' + (idx === skinIdx ? ' sel' : '') + (best < s.need ? ' locked' : '');
+      b.className = 'skindot' + (idx === skinIdx ? ' sel' : '') + (!skinUnlocked(s) ? ' locked' : '');
       b.style.background = s.disc;
       b.setAttribute('aria-label', 'Skin ' + s.name);
-      if(best < s.need) b.textContent = s.need;
+      if(!skinUnlocked(s)) b.textContent = s.streakNeed ? 'S' + s.streakNeed : s.need;
       b.addEventListener('pointerdown', function(e){
         e.stopPropagation();
         unlockAudio();
-        if(best >= s.need){
+        if(skinUnlocked(s)){
           skinIdx = idx; skin = SKINS[idx];
           store_set('pp_skin', skinIdx);
           sfxUI(); buzz(8);
           buildSkinRow();
         }else{
-          elSkinHint.textContent = 'REACH ' + s.need + ' TO UNLOCK';
-          elSkinHint.classList.add('show');
+          showToast('REACH ' + (s.streakNeed ? 'STREAK ' + s.streakNeed : s.need) + ' TO UNLOCK');
           sfxChainLost(); buzz(20);
-          if(hintTimer) clearTimeout(hintTimer);
-          hintTimer = setTimeout(function(){ elSkinHint.classList.remove('show'); }, 1400);
         }
       });
       elSkinRow.appendChild(b);
@@ -1317,6 +1367,7 @@ function showOverPanel(){
   elNewBest.classList.toggle('show', isNewBestRun);
   buildSkinRow();
   elBoardBtn.style.display = beOn ? '' : 'none';
+  elShareBtn.style.display = '';
   updateRankLines();
   elOver.classList.remove('hidden');
   sfxWhoosh();
@@ -1324,8 +1375,8 @@ function showOverPanel(){
   submitRun().then(function(){ updateRankLines(); });
 }
 function updateRankLines(){
-  if(!beOn || boardOpen) return;
-  if(myDailyRank > 0){
+  if(boardOpen) return;
+  if(beOn && myDailyRank > 0){
     elRankLine.style.display = '';
     elRankLine.textContent = 'TODAY #' + myDailyRank + ' · ALL #' + myAllRank;
   }else{
@@ -1333,7 +1384,7 @@ function updateRankLines(){
   }
   if(rival && rival.score){
     elRivalLine.style.display = '';
-    elRivalLine.textContent = 'BEAT ' + rival.name + ' · ' + rival.score;
+    elRivalLine.textContent = rival.self ? 'BEAT YOUR BEST · ' + rival.score : 'BEAT ' + rival.name + ' · ' + rival.score;
   }else{
     elRivalLine.style.display = 'none';
   }
@@ -1429,12 +1480,73 @@ elNameInput.addEventListener('change', function(){
   store_set('pp_player', player);
 });
 
+var toastTimer = null;
+function showToast(msg){
+  elSkinHint.textContent = msg;
+  elSkinHint.classList.add('show');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ elSkinHint.classList.remove('show'); }, 1500);
+}
+elShareBtn.addEventListener('pointerdown', function(e){
+  e.stopPropagation();
+  unlockAudio();
+  sfxUI(); buzz(8);
+  try{
+    var c = document.createElement('canvas');
+    c.width = 600; c.height = 740;
+    var x = c.getContext('2d');
+    x.fillStyle = COL.ink; x.fillRect(0, 0, 600, 740);
+    x.beginPath(); x.arc(300, 300, 170, 0, TAU);
+    x.fillStyle = skin.disc; x.fill();
+    x.lineWidth = 6; x.strokeStyle = 'rgba(25,19,34,0.25)'; x.stroke();
+    x.fillStyle = COL.coral;
+    for(var i = 0; i < 5; i++){
+      var an = i * TAU / 5 + 0.35;
+      x.save();
+      x.translate(300 + Math.cos(an) * 170, 300 + Math.sin(an) * 170);
+      x.rotate(an);
+      x.fillRect(-7, -12, 14, 58);
+      x.beginPath(); x.arc(0, 52, 11, 0, TAU); x.fill();
+      x.restore();
+    }
+    x.textAlign = 'center';
+    x.fillStyle = COL.cream;
+    x.font = '900 58px ' + FONT;
+    x.fillText('PINPOINT', 300, 92);
+    x.fillStyle = COL.gold;
+    x.font = '900 150px ' + FONT;
+    x.fillText(String(score), 300, 585);
+    x.fillStyle = 'rgba(244,238,225,0.7)';
+    x.font = '700 26px ' + FONT;
+    x.fillText('WHEEL #' + wheelNum, 300, 640);
+    x.fillStyle = COL.coral;
+    x.font = '800 24px ' + FONT;
+    x.fillText('CAN YOU BEAT IT?', 300, 690);
+    c.toBlob(function(blob){
+      if(!blob){ showToast('SHARE UNSUPPORTED'); return; }
+      var file = new File([blob], 'pinpoint.png', { type: 'image/png' });
+      if(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })){
+        navigator.share({ files: [file], title: 'Pinpoint', text: 'I hit ' + score + ' on WHEEL #' + wheelNum }).catch(function(){});
+      }else if(navigator.clipboard && navigator.clipboard.write && window.ClipboardItem){
+        navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(function(){
+          showToast('COPIED TO CLIPBOARD');
+        }, function(){ showToast('SHARE UNSUPPORTED'); });
+      }else{
+        showToast('SHARE UNSUPPORTED');
+      }
+    }, 'image/png');
+  }catch(err){ showToast('SHARE UNSUPPORTED'); }
+});
+elMStreak.textContent = 'STREAK ' + streak.count;
+elMStreak.style.display = streak.count >= 2 ? '' : 'none';
+
 /* ============ boot / loop ============ */
 for(var di2 = 0; di2 < DUSTN; di2++){
   dust[di2].x = rand(0, window.innerWidth);
   dust[di2].y = rand(0, window.innerHeight);
-  dust[di2].v = rand(6, 16);
-  dust[di2].s = rand(1.2, 2.8);
+  dust[di2].v = di2 < 6 ? rand(3, 7) : rand(6, 16);
+  dust[di2].s = di2 < 6 ? rand(5, 9) : rand(1.2, 2.8);
+  dust[di2].a = di2 < 6 ? rand(0.03, 0.05) : rand(0.04, 0.07);
   dust[di2].ph = rand(0, TAU);
 }
 window.addEventListener('resize', resize);
