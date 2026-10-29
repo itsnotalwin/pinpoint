@@ -8,6 +8,9 @@
 
 ## Leaderboards + daily rivals (optional)
 
+Full setup guide + how the multiplayer/ghost system works: **[SETUP.md](./SETUP.md)**.
+
+Quick version:
 1. Create a free project at https://supabase.com.
 2. SQL Editor → paste `supabase-setup.sql` → Run.
 3. Settings → API → copy the Project URL and the anon public key into `config.js`.
