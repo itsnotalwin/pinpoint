@@ -27,3 +27,11 @@ Verify GitHub Pages publishes `main`, then complete real browser score submissio
 
 ## Future hardening
 Public, unauthenticated submissions are vulnerable to fake scores despite numeric sanity limits. Consider server-side replay validation and rate limits before competitive/public launch. Displayed rank calculation should also be audited for players outside the top results.
+
+## Player identities milestone (2026-10-29)
+- Deployed code commit `72e0972ec3223efeb10229b5805c1b59fcab9501`: Supabase anonymous sign-in, unique username claim/30-day rename flow, protected score submission and email-link/recovery UI.
+- Database migration `pinpoint_authenticated_player_identities` succeeded: `pinpoint_profiles`, unique uppercase-name index, rename RPC, verified-only score RLS and authenticated score ownership trigger.
+- Three existing unauthenticated scores preserved as unverified, not assigned to anyone and hidden from new ranked boards; existing local bests, skins and self-ghosts untouched.
+- New cache `pinpoint-v1.2.5`. JS syntax parse passed. SQL permissions verified including column-level INSERT grants and no permission to set `verified`.
+- **Outstanding:** Dashboard must enable Anonymous Sign-Ins and set allowed Auth redirect URL to the GitHub Pages URL; user must test two-browser account/score flow and email recovery. No browser end-to-end verification yet. Supabase Security Advisor warns about intentional authenticated-executable SECURITY DEFINER username RPC; audit regularly. Arbitrary fake scores remain possible without server-side replay validation.
+- Full guide: [SETUP.md](./SETUP.md).
