@@ -254,7 +254,10 @@ var BE = window.PINPOINT_BACKEND || {};
 var beOn = !!(BE.url && BE.key);
 var boardOpen = false;
 function beHeaders(){
-  return { 'apikey': BE.key, 'Authorization': 'Bearer ' + BE.key, 'Content-Type': 'application/json' };
+  var headers = { 'apikey': BE.key, 'Content-Type': 'application/json' };
+  // Publishable keys are API keys, not JWTs. Legacy anon JWT keys still use Bearer.
+  if(BE.key.indexOf('sb_publishable_') !== 0) headers.Authorization = 'Bearer ' + BE.key;
+  return headers;
 }
 function uuid(){
   try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
