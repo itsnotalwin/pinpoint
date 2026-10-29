@@ -187,6 +187,26 @@ button.stat:active{transform:scale(.96);background:rgba(244,238,225,.09)}
   .screen,.screen.hidden,.btn,.tabBtn,.stat,.prompt{animation:none!important;transition:none!important}
 }
 
+/* Ghost replay preference and explicit, human-only rankings. */
+.menuMetaRow{display:flex;align-items:center;justify-content:center;gap:10px;max-width:100%}
+#menu .ghostToggle,
+#menu #ghostToggle{
+  margin-top:20px;min-height:34px;padding:7px 12px;
+  border:1px solid rgba(255,194,75,.32);border-radius:999px;
+  font:800 10px system-ui,-apple-system,"Segoe UI",sans-serif;
+  letter-spacing:.1em;white-space:nowrap;color:var(--gold);
+  background:rgba(25,19,34,.68);cursor:pointer;touch-action:manipulation;
+}
+#menu #ghostToggle.off{color:rgba(244,238,225,.64);border-color:rgba(244,238,225,.22)}
+#boardHelp{width:min(340px,86vw);margin:10px 0 0;font-size:10px;
+  line-height:1.5;letter-spacing:.09em;color:rgba(244,238,225,.65)}
+@media (max-height:740px) and (max-width:899px){
+  #menu #ghostToggle{margin-top:10px;min-height:29px;padding:5px 10px}
+}
+@media (min-width:900px) and (min-height:560px){
+  .menuMetaRow{justify-content:flex-start}
+}
+
 noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--cream)}
 </style>
 </head>
@@ -198,7 +218,10 @@ noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:
   <div class="menuHero">
     <h1 class="title">PINP<span class="o">O</span>INT</h1>
     <div class="tagline">TIME THE THROW</div>
-    <div id="wheelTag">WHEEL #1</div>
+    <div class="menuMetaRow">
+      <div id="wheelTag">WHEEL #1</div>
+      <button id="ghostToggle" type="button" aria-pressed="true" aria-label="Turn replay ghosts off">GHOSTS · ON</button>
+    </div>
   </div>
   <div class="menuGap" aria-hidden="true"></div>
   <div class="menuControls">
@@ -230,6 +253,7 @@ noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:
     <button class="tabBtn sel" id="tabDay">TODAY</button>
     <button class="tabBtn" id="tabAll">ALL-TIME</button>
   </div>
+  <div id="boardHelp">ONE BEST SCORE PER PLAYER · GHOST REPLAYS DO NOT RANK</div>
   <div id="boardList"></div>
   <button id="boardClose" class="btn" style="margin-top:16px;width:min(340px,86vw)">CLOSE</button>
 </div>
@@ -300,6 +324,7 @@ var best = store_get('pp_best', 0);
 var skinIdx = store_get('pp_skin', 0);
 var streak = store_get('pp_streak', { last: 0, count: 0 });
 var muted = store_get('pp_mute', false);
+var ghostsEnabled = store_get('pp_ghosts_enabled', true) !== false;
 
 function mulberry32(a){
   return function(){
@@ -454,10 +479,13 @@ async function flushQueue(){
   finally{flushing=false;}
 }
 window.addEventListener('online',flushQueue);
-async function beGet(qs){
+async function beGet(qs,source){
+  // Views collapse a real player's runs to one ranked personal best.
+  // A ghost is a playback of a human's winning run, never a new submission.
+  var table = (source === 'pinpoint_daily_bests' || source === 'pinpoint_alltime_bests') ? source : 'scores';
   // Public GET is read-only, and the database RLS filters unverified legacy scores.
   var headers={'apikey':BE.key,'Prefer':'count=exact'};
-  var res=await fetch(BE.url+'/rest/v1/scores?'+qs,{headers:headers});
+  var res=await fetch(BE.url+'/rest/v1/'+table+'?'+qs,{headers:headers});
   if(!res.ok)throw new Error('Leaderboard HTTP '+res.status);
   var range=res.headers.get('content-range')||'';
   var total=range.indexOf('/')>=0 ? parseInt(range.split('/')[1],10)||0:0;
@@ -466,8 +494,9 @@ async function beGet(qs){
 var myDailyRank = 0, myAllRank = 0;
 var rival = null;
 function loadRival(){
+  if(!ghostsEnabled){ rival=null; return; }
   var r=store_get('pp_rival',null);
-  if(r && r.d===dayKey && r.taps && r.taps.length){rival=r;return;}
+  if(r && r.d===dayKey && r.player_id && r.player_id!==player.id && r.taps && r.taps.length){rival=r;return;}
   var sg=store_get('pp_selfghost',null);
   if(sg && sg.taps && sg.taps.length){
     rival={self:true,name:'YOUR BEST',score:sg.score,taps:String(sg.taps).split(',').map(Number).filter(function(n){return n>0;})};return;
@@ -479,15 +508,27 @@ async function submitRun(){
   queueSubmit({player_id:player.id,authenticated:true,score:score,day_key:dayKey,duration_ms:Math.max(1000,Math.round(runT*1000)),taps:tapsRec.join(',')});
   await flushQueue();
   try{
-    var d=await beGet('select=player_id,name,score,taps&day_key=eq.'+dayKey+'&order=score.desc,created_at.asc&limit=50');
+    var d=await beGet('select=player_id,name,score,taps&day_key=eq.'+dayKey+'&order=score.desc,created_at.asc&limit=50','pinpoint_daily_bests');
     var rows=d.rows, myIdx=-1;
     for(var i=0;i<rows.length;i++){if(rows[i].player_id===player.id){myIdx=i;break;}}
     myDailyRank=myIdx>=0?myIdx+1:0;
-    if(myIdx>0)rival={d:dayKey,name:rows[myIdx-1].name,score:rows[myIdx-1].score,taps:String(rows[myIdx-1].taps||'').split(',').map(Number).filter(function(n){return n>0;})};
-    else if(myIdx<0 && rows.length)rival={d:dayKey,name:rows[rows.length-1].name,score:rows[rows.length-1].score,taps:String(rows[rows.length-1].taps||'').split(',').map(Number).filter(function(n){return n>0;})};
-    else rival=null;
-    if(rival)store_set('pp_rival',rival);
-    var a=await beGet('select=player_id,score&order=score.desc,created_at.asc&limit=50');
+    if(ghostsEnabled){
+      // Pick a different real player. Never replay another run from ourselves
+      // as though it were an additional opponent on the leaderboard.
+      var challenge=null;
+      if(myIdx>0) challenge=rows[myIdx-1];
+      else if(myIdx===0) challenge=rows[1]||null;
+      else for(var k=0;k<rows.length;k++)if(rows[k].player_id!==player.id){challenge=rows[k];break;}
+      if(challenge && challenge.player_id!==player.id && challenge.taps){
+        rival={d:dayKey,player_id:challenge.player_id,name:challenge.name,score:challenge.score,
+          taps:String(challenge.taps).split(',').map(Number).filter(function(n){return n>0;})};
+        store_set('pp_rival',rival);
+      }else{
+        store_set('pp_rival',null);
+        loadRival(); // personal-best self replay if no other player exists
+      }
+    }
+    var a=await beGet('select=player_id,score&order=score.desc,created_at.asc&limit=50','pinpoint_alltime_bests');
     myAllRank=a.rows.findIndex(function(row){return row.player_id===player.id;})+1;
   }catch(e){console.warn('Leaderboard unavailable:',apiErr(e));}
 }
@@ -495,6 +536,7 @@ async function submitRun(){
 var ghost = null, ghostFlies = [];
 function ghostInit(){
   ghostFlies.length = 0;
+  if(!ghostsEnabled){ghost=null;return;}
   if(!rival || !rival.taps || !rival.taps.length){ ghost = null; return; }
   ghost = { alive: true, self: !!rival.self, taps: rival.taps, idx: 0, stuck: [], n: 0, stage: 1, conf: stageConf(1), pinsStage: 0, done: false, name: rival.name, score: rival.score };
 }
@@ -1513,6 +1555,7 @@ var elMute = document.getElementById('muteBtn');
 var elMBest = document.getElementById('mBest');
 var elMDaily = document.getElementById('mDaily');
 var elWheelTag = document.getElementById('wheelTag');
+var elGhostToggle = document.getElementById('ghostToggle');
 var elRankLine = document.getElementById('rankLine');
 var elRivalLine = document.getElementById('rivalLine');
 var elBoard = document.getElementById('board');
@@ -1579,7 +1622,7 @@ function updateRankLines(){
   }else{
     elRankLine.style.display = 'none';
   }
-  if(rival && rival.score){
+  if(ghostsEnabled && rival && rival.score){
     elRivalLine.style.display = '';
     elRivalLine.textContent = rival.self ? 'BEAT YOUR BEST · ' + rival.score : 'BEAT ' + rival.name + ' · ' + rival.score;
   }else{
@@ -1604,6 +1647,23 @@ document.getElementById('statToday').style.display = dailyBest > 0 ? '' : 'none'
 elMStreak.textContent = streak.count;
 document.getElementById('statStreak').style.display = streak.count >= 2 ? '' : 'none';
 elWheelTag.textContent = 'WHEEL #' + wheelNum;
+function syncGhostToggle(){
+  elGhostToggle.textContent = ghostsEnabled ? 'GHOSTS · ON' : 'GHOSTS · OFF';
+  elGhostToggle.setAttribute('aria-pressed', ghostsEnabled ? 'true' : 'false');
+  elGhostToggle.setAttribute('aria-label', ghostsEnabled ? 'Turn replay ghosts off' : 'Turn replay ghosts on');
+  elGhostToggle.classList.toggle('off', !ghostsEnabled);
+}
+elGhostToggle.addEventListener('pointerdown', function(e){e.stopPropagation();});
+elGhostToggle.addEventListener('click',function(e){
+  e.stopPropagation();
+  ghostsEnabled=!ghostsEnabled;
+  store_set('pp_ghosts_enabled',ghostsEnabled);
+  loadRival();
+  ghostInit();
+  syncGhostToggle();
+  sfxUI(); buzz(8);
+});
+syncGhostToggle();
 elBoardBtnMenu.style.display = beOn ? '' : 'none';
 elNameInput.value = player.name;
 document.getElementById('claimName').addEventListener('click',claimName);
@@ -1643,7 +1703,7 @@ function fetchBoard(which){
   var qs = which === 'day'
     ? 'select=player_id,name,score&day_key=eq.' + dayKey + '&order=score.desc,created_at.asc&limit=10'
     : 'select=player_id,name,score&order=score.desc,created_at.asc&limit=10';
-  return beGet(qs).then(function(d){
+  return beGet(qs,which==='day'?'pinpoint_daily_bests':'pinpoint_alltime_bests').then(function(d){
     if(which === 'day') boardDay = d.rows; else boardAll = d.rows;
     renderBoard();
   }).catch(function(){
