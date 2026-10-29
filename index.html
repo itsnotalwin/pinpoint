@@ -97,7 +97,14 @@ button.stat:active{transform:scale(.96);background:rgba(244,238,225,.09)}
 .chipBtn{margin-top:14px;padding:10px 22px;border-radius:999px;background:rgba(244,238,225,.07);border:1px solid rgba(244,238,225,.2);
   color:var(--cream);font-size:12px;font-weight:800;letter-spacing:.22em;text-indent:.22em;font-family:inherit}
 .chipBtn:active{transform:scale(.94)}
-#board{justify-content:center;background:rgba(25,19,34,.97);z-index:8}
+#board{justify-content:flex-start;background:rgba(25,19,34,.97);z-index:8;
+  pointer-events:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  touch-action:pan-y;overscroll-behavior:contain;
+  padding-top:calc(var(--sat) + 22px);padding-bottom:calc(var(--sab) + 30px)}
+#board > *{flex-shrink:0}
+#board input{pointer-events:auto;user-select:text;-webkit-user-select:text;touch-action:manipulation}
+#board details,#board summary{pointer-events:auto}
+#board input:focus{outline:2px solid var(--gold);outline-offset:4px}
 .boardTitle{font-size:20px;font-weight:900;letter-spacing:.3em;text-indent:.3em;color:var(--cream)}
 .nameRow{margin-top:12px;font-size:11px;font-weight:700;letter-spacing:.2em;color:rgba(244,238,225,.55);display:flex;align-items:center;gap:8px}
 #nameInput{background:transparent;border:none;border-bottom:1px solid rgba(255,194,75,.5);color:var(--gold);
@@ -149,7 +156,7 @@ noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:
 
 <div id="board" class="screen hidden">
   <div class="boardTitle">LEADERBOARD</div>
-  <div class="nameRow">PLAYING AS <input id="nameInput" maxlength="12" spellcheck="false" autocomplete="off" aria-label="Claim or change player name"></div>
+  <div class="nameRow">PLAYING AS <input id="nameInput" type="text" maxlength="12" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="characters" enterkeyhint="done" aria-label="Claim or change player name"></div>
   <div id="identityStatus" style="font-size:11px;line-height:1.6;color:var(--cream);opacity:.8;margin:8px auto 12px;max-width:340px" role="status" aria-live="polite">Connecting player account...</div>
   <button id="claimName" class="btn" style="width:min(340px,86vw);margin:3px auto 8px">CLAIM / UPDATE NAME</button>
   <details style="width:min(340px,86vw);margin:0 auto 12px;color:var(--cream);font-size:12px;line-height:1.6">
@@ -951,9 +958,12 @@ window.addEventListener('keydown', function(e){
   if(e.code === 'Space' || e.code === 'Enter'){ e.preventDefault(); onDown(null); }
 });
 document.addEventListener('touchstart', function(e){
-  if(!e.target.closest || !e.target.closest('button, input')) e.preventDefault();
+  if(!e.target.closest || !e.target.closest('button, input, textarea, details, summary, #board')) e.preventDefault();
 }, { passive:false });
-document.addEventListener('touchmove', function(e){ e.preventDefault(); }, { passive:false });
+document.addEventListener('touchmove', function(e){
+  if(e.target.closest && e.target.closest('#board')) return;
+  e.preventDefault();
+}, { passive:false });
 document.addEventListener('gesturestart', function(e){ e.preventDefault(); });
 document.addEventListener('dblclick', function(e){ e.preventDefault(); });
 document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
@@ -1569,8 +1579,12 @@ document.getElementById('statStreak').addEventListener('pointerdown', function(e
 elBoardClose.addEventListener('pointerdown', function(e){ e.stopPropagation(); closeBoard(); });
 elTabDay.addEventListener('pointerdown', function(e){ e.stopPropagation(); boardTab = 'day'; elTabDay.classList.add('sel'); elTabAll.classList.remove('sel'); renderBoard(); fetchBoard('day'); });
 elTabAll.addEventListener('pointerdown', function(e){ e.stopPropagation(); boardTab = 'all'; elTabAll.classList.add('sel'); elTabDay.classList.remove('sel'); renderBoard(); fetchBoard('all'); });
-elNameInput.addEventListener('change', function(){
-  claimName();
+elNameInput.addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    elNameInput.blur();
+    claimName();
+  }
 });
 
 var toastTimer = null;
