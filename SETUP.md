@@ -93,3 +93,19 @@ The database enforces sanity ranges (score ≤ 99999, duration 1s–1h) and the 
 ## Dev notes
 - `?test` URL flag = automation hook (manual game-loop stepping, no rAF). Never appears for normal players.
 - After ANY change to `index.html`, `config.js`, or assets: bump the `CACHE` version in `sw.js`, otherwise installed players keep the old files.
+
+---
+
+## Player identities (v1.2.5)
+
+The game now supports anonymous Supabase Auth identities. Players claim case-insensitive unique names (3–12 characters, `A-Z`, digits, `_`, `-`). Server-side `claim_pinpoint_name` enforces a 30-day rename cooldown and rewrites the player's verified leaderboard names when renamed. A database unique index prevents duplicate claims even under concurrent requests.
+
+**Required dashboard switch:** Open [Supabase Auth providers](https://supabase.com/dashboard/project/sffpyvxbgmhepftxoesy/auth/providers), enable **Anonymous Sign-Ins** if it is off. This is distinct from the anonymous publishable API key and is required for players to create accounts. Configure the project [Auth URL configuration](https://supabase.com/dashboard/project/sffpyvxbgmhepftxoesy/auth/url-configuration) with Site URL `https://itsnotalwin.github.io/pinpoint/` and the same URL as an allowed redirect for recovery.
+
+**Migration:** Existing unauthenticated scores are preserved with `verified=false`, cannot be attributed to a newly claimed identity, and are hidden from authenticated leaderboards. Existing local bests, skins and self ghosts remain available on the device. Legacy queued submissions are dropped instead of forging ownership.
+
+**Security:** The public `scores` table now grants read access to verified rows only. Anonymous API-key clients can no longer insert. Authenticated score submissions are associated with their Supabase `auth.uid()`, and a server-side trigger supplies the canonical claimed name. `pinpoint_profiles` cannot be inserted/updated directly from the client. The claim RPC is deliberately SECURITY DEFINER and explicitly checks the authenticated caller's identity; this produces a Supabase Security Advisor warning, which requires periodic review. A valid authenticated player can still submit **fabricated scores**, so server-side replay verification and rate limiting are future work.
+
+**Optional recovery:** The leaderboard's recovery section links a verified email using `updateUser`, then allows returning users to recover via email OTP or magic link. Users should link and confirm an email before clearing browser data. Unlinked anonymous sessions cannot be recovered after storage is lost. Linking email requires Supabase email delivery to be configured and deliverable. No physical device identifiers are collected.
+
+**Testing:** Open the game in two independent browsers. Claim distinct names, attempt duplicate claim, submit scores, verify each player can see both names, attempt an immediate rename (must be rejected), verify older unauthenticated scores remain excluded, and verify email recovery on a new browser. Also confirm offline local gameplay and retry when connectivity returns. The source JS parser and database permissions were verified on 2026-10-29, but a real public two-browser runtime test remains pending.
