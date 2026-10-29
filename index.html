@@ -284,6 +284,16 @@ if(!player || !player.id){
   store_set('pp_player',player);
 }
 function apiErr(error){ return error && (error.message || error.error_description) || 'Connection failed'; }
+function authTroubleshooting(error){
+  var message = apiErr(error);
+  if(/anonymous.*sign.ins.*disabled|anonymous_provider_disabled/i.test(message)){
+    return 'ANONYMOUS SIGN-INS ARE DISABLED IN PINPOINT SUPABASE. ENABLE AUTHENTICATION > PROVIDERS > ANONYMOUS, THEN PRESS CLAIM AGAIN.';
+  }
+  if(/failed to fetch|network|load failed/i.test(message)){
+    return 'CANNOT REACH SUPABASE. CHECK YOUR CONNECTION AND PRESS CLAIM TO RETRY.';
+  }
+  return 'ONLINE IDENTITY UNAVAILABLE: ' + message + '. PRESS CLAIM TO RETRY.';
+}
 function displayProfile(p){
   identityProfile = p; profileReady = !!p;
   if(p){
@@ -294,11 +304,19 @@ function displayProfile(p){
     flushQueue();
   }else identityMessage('CLAIM A UNIQUE NAME TO JOIN THE ONLINE LEADERBOARD. OFFLINE PLAY STILL WORKS.');
 }
+var identityInitPending = null;
 async function identityInit(){
+  if(identityInitPending) return identityInitPending;
+  identityInitPending = initializePlayerIdentity();
+  try { return await identityInitPending; }
+  finally { identityInitPending = null; }
+}
+async function initializePlayerIdentity(){
   if(!beOn){ identityMessage('OFFLINE PROFILE ONLY'); return; }
-  if(!window.supabase || !window.supabase.createClient){ identityMessage('AUTH CLIENT UNAVAILABLE; OFFLINE PLAY WORKS.'); return; }
+  if(!window.supabase || !window.supabase.createClient){ identityMessage('AUTH CLIENT DID NOT LOAD. CHECK CONNECTION, REOPEN APP, AND PRESS CLAIM TO RETRY.'); return; }
   try{
-    sb = window.supabase.createClient(BE.url,BE.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+    identityMessage('CONNECTING PLAYER ACCOUNT...');
+    if(!sb) sb = window.supabase.createClient(BE.url,BE.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
     var sessionResult = await sb.auth.getSession();
     var session = sessionResult.data && sessionResult.data.session;
     if(!session){ var a = await sb.auth.signInAnonymously(); if(a.error) throw a.error; }
@@ -310,10 +328,13 @@ async function identityInit(){
     sb.auth.onAuthStateChange(function(ev){
       if(ev === 'SIGNED_OUT'){ authReady=false; profileReady=false; identityMessage('SIGNED OUT. RELOAD TO RESUME.'); }
     });
-  }catch(e){ authReady=false; profileReady=false; identityMessage('ONLINE IDENTITY UNAVAILABLE: '+apiErr(e)); }
+   }catch(e){ authReady=false; profileReady=false; identityMessage(authTroubleshooting(e)); }
 }
 async function claimName(){
-  if(!sb || !authReady){ identityMessage('WAIT FOR AUTHENTICATION OR RETRY ONLINE.'); return; }
+  if(!sb || !authReady){
+    await identityInit();
+    if(!sb || !authReady) return;
+  }
   var name=sanitizeName(document.getElementById('nameInput').value);
   if(name.length<3){ identityMessage('NAME MUST BE 3–12 LETTERS, DIGITS, _ OR -.'); return; }
   identityMessage('CHECKING NAME...');
