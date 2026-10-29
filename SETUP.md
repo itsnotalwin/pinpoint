@@ -113,3 +113,7 @@ The game now supports anonymous Supabase Auth identities. Players claim case-ins
 
 ### Username box cannot be tapped on mobile
 Fixed on `main` in `pinpoint-v1.2.6`: the board overlay previously blocked pointer events on all controls except buttons. Refresh the game to obtain the new PWA cache. The input accepts taps and keyboard entry; name updates happen **only** after pressing **CLAIM / UPDATE NAME** or Enter (not merely leaving the input). The account-recovery details and the leaderboard can scroll on smaller screens. If the name can be typed but claiming fails, check the status message below PLAYING AS and verify Anonymous Sign-Ins is enabled.
+
+
+### Error: WAIT FOR AUTHENTICATION OR RETRY ONLINE
+A real failure was verified on 2026-10-30: Supabase Auth was returning HTTP 422 `anonymous_provider_disabled` on `POST /signup`. In the dedicated **Pinpoint** project, open [Authentication Providers](https://supabase.com/dashboard/project/sffpyvxbgmhepftxoesy/auth/providers), enable **Anonymous Sign-Ins** and save. This is **not** the anon/publishable API key or Email provider. With `pinpoint-v1.2.7` the name-claim button retries authentication and reports the real reason instead of a generic wait message. Existing local scores do not need to be deleted. No new verified scores or accounts existed when this failure was diagnosed.
