@@ -12,24 +12,25 @@ The game is a static PWA on GitHub Pages, so scores need a tiny backend. We use 
 2. Open **SQL Editor** in the Supabase dashboard, paste the full contents of [`supabase-setup.sql`](./supabase-setup.sql) from this repo, and **Run**. It creates:
    - a `scores` table (`player_id`, `name`, `score`, `day_key`, `duration_ms`, `taps`, `created_at`) with sanity constraints,
    - indexes for the leaderboard queries,
-   - Row Level Security policies: **everyone can read, everyone can insert**.
-3. Go to **Settings → API** and copy two strings:
+   - Row Level Security policies: **anonymous clients can read and insert** (no update or delete privileges); public scores and tap timelines are visible to anyone with the public key.
+   - Explicit `anon` Data API grants, so it works on projects that do not grant table access automatically.
+3. In the project's **Connect** dialog or **Project Settings → API Keys**, copy:
    - **Project URL** (looks like `https://xxxx.supabase.co`)
-   - **anon public key** (safe to ship in a client — it's not a secret)
+   - **Publishable key** (`sb_publishable_...`, safe to use in a browser). A legacy `anon` JWT key also works if you already have one. **Never use a `secret` or `service_role` key in this public repository.**
 4. Open [`config.js`](./config.js) in this repo and paste them:
    ```js
    window.PINPOINT_BACKEND = {
      url: 'https://xxxx.supabase.co',
-     key: 'eyJ...your-anon-key...'
+     key: 'sb_publishable_...'
    };
    ```
-5. **Bump the cache version** in `sw.js` (change `pinpoint-v1.2.2` to `v1.2.3`), commit both files, and push. This is required — the service worker caches `config.js`, so installed players only see a new config after the cache version changes.
+5. **Bump the cache version** in `sw.js` when configuring your own project (for example, change `pinpoint-v1.2.3` to `pinpoint-v1.2.4`) and commit both files. The service worker caches `config.js`, so installed players need a new cache version to receive changed settings.
 
 **Verify it works:** play one run and die. Your score should appear in the Supabase dashboard (Table Editor → `scores`), and the LEADERBOARD button appears on the menu and game-over screen.
 
 **Troubleshooting**
 - **No LEADERBOARD button anywhere** → `config.js` is empty or wasn't deployed (check the deployed file at `https://USERNAME.github.io/REPO-NAME/config.js`).
-- **Board says OFFLINE** → wrong URL/key, or the SQL wasn't run (RLS blocks everything if the table doesn't exist).
+- **Board says OFFLINE** → check the URL/key, confirm the SQL ran and the Data API is enabled, and verify table grants + RLS policies. Use the browser Network tab for the actual HTTP status.
 - **Board stuck on old data** → you forgot to bump the `sw.js` cache version after changing something.
 
 ---
@@ -78,7 +79,7 @@ Even with Supabase disabled, your personal best run's timeline is saved locally 
 Skins unlock at all-time bests of 10 / 25 / 50 / 75 / 150, plus **BLOODMOON** at a 7-day play streak.
 
 ### Anti-cheat — honest status
-The server enforces sanity ranges (score ≤ 99999, duration 1s–1h) and the anon key is public by design, so a determined cheater with devtools can post fake rows. Practical hardening, in order of effort:
+The database enforces sanity ranges (score ≤ 99999, duration 1s–1h) and the publishable key is public by design, so a determined cheater with devtools can post fake rows. Practical hardening, in order of effort:
 1. (shipped) constraint checks + client-side retry queue shapes traffic.
 2. per-UUID/IP rate limits in Supabase or a proxy.
 3. the strong one: **server-side re-simulation** — replay a submitted tap timeline and reject rows whose re-simulated score doesn't match. Cheap to add later (e.g. a Cloudflare Worker) because the sim is deterministic.
