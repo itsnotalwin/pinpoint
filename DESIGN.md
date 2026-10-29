@@ -18,3 +18,7 @@ The menu, gameplay, game-over, and leaderboard overlays must never visually coll
 - **2026-10-30 production pass:** responsive refactor in `index.html` commits `cc3f3bac94880db5a22a11b9d9166622784a796c` and `aead9102962f5ca25ed0cf4a4ec5ee48917e842c`; cache `pinpoint-v1.2.8`.
 - **Isolated DOM geometry smoke checks** (not the full game): 320×568, 375×667, 390×844, 430×932, 768×800, 1366×768 and 1920×1080. Header/footer have measurable wheel clearance; full production render and user-device screenshot **not yet verified**.
 - **Screenshot status:** no genuinely captured post-change full-game screenshot is available. Do not substitute a generated mockup or test harness screenshot as actual deployed visual evidence. Capture the deployed app at 390×844 and desktop 1366×768 after release and attach authentic `SCREENSHOT.png` (and optional mobile variant) only after verification.
+
+
+## v1.2.9 replay controls and collection planning
+The menu day identifier now shares a compact row with a clearly labeled `GHOSTS · ON/OFF` button. The leaderboard has a second synchronized switch in a small `GHOST CHALLENGES` settings row and text clarifying that only one real personal-best score per player ranks. Both switches are keyboard-operable, use `aria-pressed`, and preserve the selected state via browser storage. The wheel collection described in [SKIN-PROGRESSION.md](./SKIN-PROGRESSION.md) is a **future design**, not currently rendered or deployed. A current authentic on-device screenshot of both toggle positions is still pending after v1.2.9 deployment.
