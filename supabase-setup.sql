@@ -21,3 +21,8 @@ create policy "public read scores" on public.scores for select using (true);
 
 drop policy if exists "public insert scores" on public.scores;
 create policy "public insert scores" on public.scores for insert with check (true);
+
+-- Explicit Data API privileges (new Supabase projects may not auto-grant these).
+-- The game has anonymous players and only needs read + insert access.
+grant usage on schema public to anon;
+grant select, insert on public.scores to anon;
