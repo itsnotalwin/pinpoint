@@ -1,0 +1,20 @@
+# Pinpoint visual design and production QA
+
+## Direction
+A focused one-tap arcade game: dark aubergine canvas (`#191322`), cream concentric disc, coral impact accents (`#FF4E6A`), and gold (`#FFC24B`) for competitive status. Keep type bold, geometric, and restrained. The wheel should remain the hero, with controls secondary.
+
+## Responsive layout
+- **Phone (320–430px):** stable title/tagline/day identifier at the top, spinning wheel in the measured space between header and controls, score cards and leaderboards at the bottom. All touch targets at least ~43–48px.
+- **Tablet/compact windows:** same vertically composed layout; game wheel scales to available real space, not arbitrary viewport offsets.
+- **Desktop (900px+, sufficient height):** editorial left-side information and actions, large wheel on the right. The playable canvas recentres for gameplay.
+- **Small-height mobile:** compact header/footer, resilient game-over spacing and scrollable leaderboard.
+- **Leaderboard:** opaque surface, accessible username input and optional recovery disclosure, sticky close control, readable rankings and visible keyboard focus.
+
+## Interaction and state
+The menu, gameplay, game-over, and leaderboard overlays must never visually collide. Save the offline game loop, personal scores, skins, and anonymous-auth identity lifecycle unchanged during layout work. Keep iOS safe-area handling and keyboard focus available. Prefer `prefers-reduced-motion` when requested.
+
+## Verification / visual evidence
+- **2026-10-30 source review:** user-supplied authentic screenshot of the *earlier* menu revealed day identifier/score competition near the top and a visually uneven header-to-footer rhythm.
+- **2026-10-30 production pass:** responsive refactor in `index.html` commits `cc3f3bac94880db5a22a11b9d9166622784a796c` and `aead9102962f5ca25ed0cf4a4ec5ee48917e842c`; cache `pinpoint-v1.2.8`.
+- **Isolated DOM geometry smoke checks** (not the full game): 320×568, 375×667, 390×844, 430×932, 768×800, 1366×768 and 1920×1080. Header/footer have measurable wheel clearance; full production render and user-device screenshot **not yet verified**.
+- **Screenshot status:** no genuinely captured post-change full-game screenshot is available. Do not substitute a generated mockup or test harness screenshot as actual deployed visual evidence. Capture the deployed app at 390×844 and desktop 1366×768 after release and attach authentic `SCREENSHOT.png` (and optional mobile variant) only after verification.
