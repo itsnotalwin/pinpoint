@@ -13,5 +13,5 @@ Full setup guide + how the multiplayer/ghost system works: **[SETUP.md](./SETUP.
 Quick version:
 1. Create a free project at https://supabase.com.
 2. SQL Editor → paste `supabase-setup.sql` → Run.
-3. Settings → API → copy the Project URL and the anon public key into `config.js`.
-4. Bump the `CACHE` version string in `sw.js` (e.g. `pinpoint-v1.2.2`) and push — installed players get the update automatically on their next menu/game-over tap.
+3. Copy the Project URL and **publishable** (`sb_publishable_...`) key from Supabase's Connect dialog into `config.js`. Never commit a secret/service_role key.
+4. Bump the `CACHE` version string in `sw.js` (e.g. `pinpoint-v1.2.4`) and push so installed players receive the new config.
