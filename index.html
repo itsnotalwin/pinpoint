@@ -11,7 +11,8 @@
 <link rel="apple-touch-icon" href="./icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- iOS 26/27: no black-translucent install-time chrome.
+     WebKit can reserve an unreachable status-bar-height strip below PWAs. -->
 <meta name="apple-mobile-web-app-title" content="Pinpoint">
 <style>
 :root{
@@ -217,6 +218,17 @@ button.stat:active{transform:scale(.96);background:rgba(244,238,225,.09)}
   .menuMetaRow{justify-content:flex-start}
 }
 
+.deviceTools{width:min(340px,86vw);margin:10px auto 0;padding:10px 12px;
+  border:1px solid rgba(244,238,225,.14);border-radius:12px;
+  font-size:11px;line-height:1.5;color:rgba(244,238,225,.79);text-align:left}
+.deviceTools summary{cursor:pointer;font-weight:800;letter-spacing:.07em;min-height:25px}
+.deviceTools p{margin:8px 0}
+.deviceTools .btn{width:100%;min-height:42px;margin-top:8px;letter-spacing:.08em;font-size:11px}
+#localProgressCode{width:100%;min-height:75px;margin-top:8px;padding:9px;
+  color:var(--cream);background:rgba(244,238,225,.06);border:1px solid rgba(244,238,225,.26);
+  border-radius:8px;font-family:ui-monospace,monospace;font-size:12px;line-height:1.4;
+  resize:vertical;touch-action:pan-y;pointer-events:auto;user-select:text;-webkit-user-select:text}
+#backupStatus{color:var(--gold);overflow-wrap:anywhere}
 noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--cream)}
 </style>
 </head>
@@ -267,6 +279,15 @@ noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:
     <button class="tabBtn sel" id="tabDay">TODAY</button>
     <button class="tabBtn" id="tabAll">ALL-TIME</button>
   </div>
+  <details id="deviceTools" class="deviceTools">
+    <summary>DISPLAY &amp; PROGRESS BACKUP</summary>
+    <p id="displayDiagnostics"></p>
+    <p>Before removing an installed iPhone PWA, link and verify an account-recovery email above. Export your local score and wheel data below. This backup intentionally excludes login credentials and does not restore your online identity.</p>
+    <button id="copyLocalProgress" class="btn" type="button">COPY LOCAL BACKUP</button>
+    <textarea id="localProgressCode" rows="3" spellcheck="false" placeholder="Backup code to save or paste for restoration" aria-label="Local game progress backup code"></textarea>
+    <button id="restoreLocalProgress" class="btn" type="button">RESTORE LOCAL PROGRESS</button>
+    <p id="backupStatus" role="status" aria-live="polite"></p>
+  </details>
   <div id="boardHelp">ONE BEST SCORE PER PLAYER · GHOST REPLAYS DO NOT RANK</div>
   <div id="boardList"></div>
   <button id="boardClose" class="btn" style="margin-top:16px;width:min(340px,86vw)">CLOSE</button>
@@ -1625,6 +1646,90 @@ var elNameInput = document.getElementById('nameInput');
 var elShareBtn = document.getElementById('shareBtn');
 var elMStreak = document.getElementById('mStreak');
 var boardTab = 'day', boardDay = [], boardAll = [];
+
+/* Local-only reinstall safety. Never copy Supabase auth keys, sessions, player
+   identifiers, queued online scores or a rival's recording into backup text. */
+var PROGRESS_KEYS = ['pp_best','pp_daily','pp_streak','pp_skin','pp_mute','pp_ghosts_enabled','pp_selfghost'];
+var progressTextarea = document.getElementById('localProgressCode');
+var backupStatus = document.getElementById('backupStatus');
+function showViewportInfo(){
+  var standAlone = navigator.standalone === true ||
+    !!(window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  var vp = window.visualViewport;
+  var csp = getComputedStyle(probe);
+  var physicalGap = Math.max(0, Math.round(screen.height - innerHeight));
+  document.getElementById('displayDiagnostics').textContent =
+    'PINPOINT 1.2.12 · MODE: ' + (standAlone?'INSTALLED':'BROWSER') +
+    ' · SCREEN: '+screen.width+'×'+screen.height+
+    ' · VIEW: '+innerWidth+'×'+innerHeight+
+    ' · VISUAL: '+(vp?Math.round(vp.height):'N/A')+
+    ' · SAFE T/B: '+(parseFloat(csp.paddingTop)||0)+'/'+(parseFloat(csp.paddingBottom)||0)+
+    ' · OUTSIDE VIEW: '+physicalGap+'px. If the outside-view gap is about 59–62px on an iPhone, the strip is reserved by iOS rather than drawn by the game.';
+}
+document.getElementById('deviceTools').addEventListener('toggle',function(){
+  if(this.open)showViewportInfo();
+});
+document.getElementById('copyLocalProgress').addEventListener('click',async function(e){
+  e.stopPropagation();
+  var values={};
+  PROGRESS_KEYS.forEach(function(k){values[k]=store_get(k,null);});
+  var json=JSON.stringify({pinpointProgress:1,data:values});
+  progressTextarea.value=json;
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(json);
+      backupStatus.textContent='LOCAL BACKUP COPIED. Save it in a note before reinstalling.';
+    }else{
+      progressTextarea.focus();progressTextarea.select();
+      backupStatus.textContent='SELECT ALL AND COPY THE CODE ABOVE. Save it in a note before reinstalling.';
+    }
+  }catch(err){
+    progressTextarea.focus();progressTextarea.select();
+    backupStatus.textContent='COPY NOT AVAILABLE AUTOMATICALLY. Select and copy the code above manually.';
+  }
+});
+document.getElementById('restoreLocalProgress').addEventListener('click',function(e){
+  e.stopPropagation();
+  try{
+    var input=progressTextarea.value;
+    if(input.length>32000)throw Error('Backup code too large');
+    var record=JSON.parse(input);
+    if(record.pinpointProgress!==1 || !record.data || typeof record.data!=='object' ||
+      Array.isArray(record.data))throw Error('Not a Pinpoint local backup');
+    var data=record.data;
+    function validNum(n){return Number.isSafeInteger(n)&&n>=0&&n<=99999;}
+    if(!validNum(data.pp_best))throw Error('Invalid best-score value');
+    var toRestore={pp_best:Math.max(best,data.pp_best)};
+    if(data.pp_daily && typeof data.pp_daily==='object' &&
+      validNum(data.pp_daily.b) && Number.isSafeInteger(data.pp_daily.d) &&
+      data.pp_daily.d>=20200101 && data.pp_daily.d<=21001231){
+      var existing=store_get('pp_daily',null);
+      if(!existing || data.pp_daily.d>existing.d ||
+          (data.pp_daily.d===existing.d&&data.pp_daily.b>existing.b)){
+        toRestore.pp_daily={d:data.pp_daily.d,b:data.pp_daily.b};
+      }
+    }
+    if(Number.isInteger(data.pp_skin)&&data.pp_skin>=0&&data.pp_skin<SKINS.length &&
+      (toRestore.pp_best>=SKINS[data.pp_skin].need || data.pp_skin===0)){
+      toRestore.pp_skin=data.pp_skin;
+    }
+    if(typeof data.pp_mute==='boolean')toRestore.pp_mute=data.pp_mute;
+    if(typeof data.pp_ghosts_enabled==='boolean')toRestore.pp_ghosts_enabled=data.pp_ghosts_enabled;
+    if(data.pp_streak && typeof data.pp_streak==='object' &&
+      validNum(data.pp_streak.count) && Number.isSafeInteger(data.pp_streak.last) &&
+      data.pp_streak.last>=0&&data.pp_streak.last<=21001231){
+      toRestore.pp_streak={last:data.pp_streak.last,count:data.pp_streak.count};
+    }
+    if(data.pp_selfghost&&typeof data.pp_selfghost==='object' &&
+      validNum(data.pp_selfghost.score) && typeof data.pp_selfghost.taps==='string' &&
+      data.pp_selfghost.taps.length<=16000 && /^([0-9]+)(,[0-9]+)*$/.test(data.pp_selfghost.taps)){
+      toRestore.pp_selfghost={score:data.pp_selfghost.score,taps:data.pp_selfghost.taps};
+    }
+    Object.keys(toRestore).forEach(function(k){store_set(k,toRestore[k]);});
+    backupStatus.textContent='LOCAL PROGRESS RESTORED. Reloading game now; online account still needs normal sign-in.';
+    location.reload();
+  }catch(err){backupStatus.textContent='RESTORE FAILED: '+err.message;}
+});
 
 var hintTimer = null;
 function buildSkinRow(){
