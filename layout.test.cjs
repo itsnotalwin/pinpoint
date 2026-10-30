@@ -51,3 +51,20 @@ test('standalone iPhone background seam matches canvas fade',()=>{
   assert.match(html,/bottomFade\.addColorStop\(1, 'rgba\(18,13,25,1\)'\)/);
   assert.match(html,/<meta name="theme-color" content="#120d19">/);
 });
+
+
+test('iOS installed app avoids deprecated black-translucent chrome',()=>{
+  assert.doesNotMatch(html, /<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/);
+  assert.match(html, /name="apple-mobile-web-app-capable" content="yes"/);
+  assert.match(html, /viewport-fit=cover/);
+});
+
+test('reinstall progress backup excludes authentication and identity',()=>{
+  assert.match(html, /id="deviceTools"/);
+  assert.match(html, /PINPOINT 1\.2\.12/);
+  assert.match(html, /PROGRESS_KEYS = \[['"]pp_best['"]/);
+  assert.match(html, /'pp_selfghost'\]/);
+  assert.doesNotMatch(html, /PROGRESS_KEYS = \[[^\]]*(?:supabase|auth|pp_player|pp_queue|pp_rival)/);
+  assert.match(html, /record\.pinpointProgress!==1/);
+  assert.match(html, /input\.length>32000/);
+});
