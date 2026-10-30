@@ -22,3 +22,9 @@ The menu, gameplay, game-over, and leaderboard overlays must never visually coll
 
 ## v1.2.9 replay controls and collection planning
 The menu day identifier now shares a compact row with a clearly labeled `GHOSTS · ON/OFF` button. The leaderboard has a second synchronized switch in a small `GHOST CHALLENGES` settings row and text clarifying that only one real personal-best score per player ranks. Both switches are keyboard-operable, use `aria-pressed`, and preserve the selected state via browser storage. The wheel collection described in [SKIN-PROGRESSION.md](./SKIN-PROGRESSION.md) is a **future design**, not currently rendered or deployed. A current authentic on-device screenshot of both toggle positions is still pending after v1.2.9 deployment.
+
+
+## Gameplay viewport contract (v1.2.10)
+The real iPhone game screenshot supplied 2026-10-30 showed an oversized vertical gap and gameplay score/launcher drifting into the system status/home-indicator zones. Use ONE_MORE's proven principle: size the fixed game stage to `100dvh` and measure canvas from `stage.clientWidth/clientHeight`, not `window.innerHeight`. For narrow portrait gameplay, a pure `portraitGameplayLayout` computes protected HUD top (including safe-area fallback), balanced wheel center/radius, and raised launcher bottom. The existing desktop/landscape and menu layouts continue to use their own geometry. Rendered score/level/combo positions now use protected HUD anchors instead of raw `safeT + 56*K`.
+
+**Preliminary tests:** JavaScript syntax passed; mathematical safe-area/element clearance verified at seven mobile viewport sizes in model-run checks. A headless regression file `layout.test.cjs` documents the assertions. **Authentic post-fix screenshots are still required**, especially the iPhone status bar, wheel BEST label, launcher and home-indicator edge during real play. Keep game physics, collision radius calculations, and game over flow unchanged.
