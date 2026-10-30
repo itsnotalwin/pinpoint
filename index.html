@@ -24,15 +24,16 @@
   --sab:env(safe-area-inset-bottom,0px);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%}
+html,body{height:100%;height:100dvh}
 body{
-  position:fixed;inset:0;overflow:hidden;background:var(--ink);color:var(--cream);
+  position:fixed;inset:0;height:100dvh;overflow:hidden;background:var(--ink);color:var(--cream);
   touch-action:none;overscroll-behavior:none;
   user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
   -webkit-tap-highlight-color:transparent;
   font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 }
-#game{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#stage{position:fixed;inset:0;width:100%;height:100%;height:100dvh;overflow:hidden;touch-action:none}
+#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #safeprobe{position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 .screen{position:fixed;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;
@@ -219,7 +220,7 @@ noscript{position:fixed;inset:0;display:flex;align-items:center;justify-content:
 </style>
 </head>
 <body>
-<canvas id="game"></canvas>
+<div id="stage"><canvas id="game"></canvas></div>
 <div id="safeprobe"></div>
 
 <div id="menu" class="screen">
@@ -594,11 +595,12 @@ function ghostLand(){
 }
 
 /* ============ canvas / layout ============ */
+var stageEl = document.getElementById('stage');
 var cv = document.getElementById('game');
 var g = cv.getContext('2d', { alpha:false });
 var probe = document.getElementById('safeprobe');
 var W = 0, H = 0, DPR = 1, U = 0, K = 1;
-var safeT = 0, safeB = 0;
+var safeT = 0, safeB = 0, hudTop = 0, hudScoreY = 0;
 var R = 100, CX = 0, CY = 0, throwY = 0, arcR = 0, needleW = 9, collideA = 0.07, stickLen = 0, Reff = 100;
 var NEAR_A = 0.30;
 var FLIGHT = 0.095, THROW_CD = 0.07, MAX_AIR = 3;
@@ -615,8 +617,27 @@ auraCv.width = 256; auraCv.height = 256;
   ac.fillRect(0, 0, 256, 256);
 })();
 
+/* Measured gameplay anchors. Inspired by ONE_MORE's full-viewport stage:
+   calculate positions from the visible play stage, not hard-coded window offsets.
+   Pure helper keeps the mobile safe-area contract easy to regression-test. */
+function portraitGameplayLayout(width,height,topInset,bottomInset,scale){
+  var protectedTop = Math.max(topInset,48);
+  var protectedBottom = Math.max(bottomInset,24);
+  var scoreY = protectedTop + Math.min(68,Math.max(55,height * 0.078));
+  var scoreFont = Math.max(43,Math.min(62 * scale, Math.min(62,height * 0.075)));
+  var launcherY = height - protectedBottom - Math.max(116,Math.min(148,height * 0.16));
+  var regionTop = Math.max(protectedTop + 148,scoreY + scoreFont / 2 + 55);
+  var regionBottom = launcherY - Math.max(64,75 * scale);
+  var span = Math.max(70,regionBottom - regionTop);
+  var radius = Math.max(34,Math.min(width * 0.30,span * 0.43));
+  var centerY = regionTop + span * 0.5;
+  return {top:protectedTop,bottom:protectedBottom,scoreY:scoreY,
+    scoreFont:scoreFont,launcherY:launcherY,centerY:centerY,radius:radius};
+}
+
 function resize(){
-  W = window.innerWidth; H = window.innerHeight;
+  W = stageEl.clientWidth || window.innerWidth;
+  H = stageEl.clientHeight || window.innerHeight;
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -625,6 +646,8 @@ function resize(){
   safeB = parseFloat(cs.paddingBottom) || 0;
   U = Math.min(W, H); K = U / 420;
   needleW = Math.max(7, 9.2 * K);
+  hudTop = safeT;
+  hudScoreY = safeT + 56 * K;
   var top = safeT + 118 * K + 8;
   var bot = H - safeB - 96 * K;
   if(bot - top < 120){ top = safeT + 8; bot = H - safeB - 8; }
@@ -632,6 +655,17 @@ function resize(){
   CX = W / 2;
   CY = top + (bot - top) * 0.42;
   throwY = bot;
+  // Give gameplay its own measured portrait stack: notches/HUD, wheel, launcher.
+  // Menu and landscape/desktop composition retain their existing geometry.
+  if(state !== ST.menu && W <= 720 && H > W){
+    var layout = portraitGameplayLayout(W,H,safeT,safeB,K);
+    hudTop = layout.top;
+    hudScoreY = layout.scoreY;
+    R = layout.radius;
+    CX = W/2;
+    CY = layout.centerY;
+    throwY = layout.launcherY;
+  }
   // Menu-only geometry respects the actual header and controls on each viewport.
   // Gameplay and its hitboxes keep their existing layout and deterministic timing.
   if(state === ST.menu){
@@ -1435,10 +1469,10 @@ function drawHUD(){
   var sv = String(score);
   if(sv !== sScore) sScore = sv;
   g.save();
-  g.translate(W / 2, safeT + 56 * K);
+  g.translate(W / 2, hudScoreY);
   g.scale(sc, sc);
   g.fillStyle = COL.cream;
-  g.font = font(Math.round(62 * K), 900);
+  g.font = font(Math.round(state!==ST.menu && W<=720 && H>W ? Math.min(62*K,Math.min(62,H*.075)) : 62*K), 900);
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillText(sScore, 0, 0);
   g.restore();
@@ -1448,7 +1482,7 @@ function drawHUD(){
     g.fillStyle = COL.gold;
     g.font = font(Math.round(16 * K), 800);
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(sChain, W / 2, safeT + 56 * K + 40 * K);
+    g.fillText(sChain, W / 2, hudScoreY + 40 * K);
   }
   var lv = 'LVL ' + stage;
   if(lv !== sLvl) sLvl = lv;
@@ -1457,9 +1491,9 @@ function drawHUD(){
   g.fillStyle = 'rgba(244,238,225,0.55)';
   g.font = font(Math.round(15 * K), 800);
   g.textAlign = 'left'; g.textBaseline = 'top';
-  g.fillText(sLvl, 16, safeT + 16);
+  g.fillText(sLvl, 16, hudTop + 16);
   g.font = font(Math.round(12 * K), 600);
-  g.fillText(sProg, 16, safeT + 16 + 20 * K);
+  g.fillText(sProg, 16, hudTop + 16 + 20 * K);
   if(state === ST.play && pinsThrownRun === 0){
     var pulse = 0.4 + 0.35 * Math.sin(tGlobal * 5);
     g.fillStyle = 'rgba(244,238,225,' + pulse.toFixed(3) + ')';
@@ -1837,6 +1871,7 @@ for(var di2 = 0; di2 < DUSTN; di2++){
   dust[di2].ph = rand(0, TAU);
 }
 window.addEventListener('resize', resize);
+if(window.visualViewport) window.visualViewport.addEventListener('resize',resize);
 window.addEventListener('orientationchange', function(){ setTimeout(resize, 100); });
 resize();
 setupMenuScene();
