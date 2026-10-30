@@ -40,3 +40,14 @@ test('desktop and menu keep distinct layout branches',()=>{
   assert.match(html,/if\(state !== ST\.menu && W <= 720 && H > W\)/);
   assert.match(html,/if\(state === ST\.menu\)/);
 });
+
+test('standalone iPhone background seam matches canvas fade',()=>{
+  const manifest = JSON.parse(fs.readFileSync(require('node:path').join(__dirname,'manifest.json'),'utf8'));
+  assert.equal(manifest.background_color,'#120d19');
+  assert.equal(manifest.theme_color,'#120d19');
+  assert.match(html,/--edge:#120d19/);
+  assert.match(html,/html,body\{[^}]*background:var\(--edge\)/);
+  assert.match(html,/#stage\{[^}]*background:var\(--edge\)/);
+  assert.match(html,/bottomFade\.addColorStop\(1, 'rgba\(18,13,25,1\)'\)/);
+  assert.match(html,/<meta name="theme-color" content="#120d19">/);
+});
