@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Pinpoint — One-Tap Timing</title>
 <meta name="description" content="Pinpoint: tap to fire a needle into the spinning wheel. Land every shot clear. One thumb, pure timing.">
-<meta name="theme-color" content="#191322">
+<meta name="theme-color" content="#120d19">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" type="image/png" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./icon-180.png">
@@ -16,6 +16,7 @@
 <style>
 :root{
   --ink:#191322;
+  --edge:#120d19; /* exact opaque canvas edge; also used by the iOS PWA shell */
   --ink2:#241B33;
   --cream:#F4EEE1;
   --coral:#FF4E6A;
@@ -24,15 +25,15 @@
   --sab:env(safe-area-inset-bottom,0px);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;height:100dvh}
+html,body{height:100%;height:100dvh;background:var(--edge)}
 body{
-  position:fixed;inset:0;height:100dvh;overflow:hidden;background:var(--ink);color:var(--cream);
+  position:fixed;inset:0;height:100dvh;overflow:hidden;background:var(--edge);color:var(--cream);
   touch-action:none;overscroll-behavior:none;
   user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
   -webkit-tap-highlight-color:transparent;
   font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 }
-#stage{position:fixed;inset:0;width:100%;height:100%;height:100dvh;overflow:hidden;touch-action:none}
+#stage{position:fixed;inset:0;width:100%;height:100%;height:100dvh;overflow:hidden;touch-action:none;background:var(--edge)}
 #game{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #safeprobe{position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -700,6 +701,14 @@ function resize(){
   vc.clearRect(0, 0, vg.width, vg.height);
   vc.fillStyle = grad;
   vc.fillRect(0, 0, vg.width, vg.height);
+  // iOS standalone PWAs can reserve a native home-indicator strip outside 100dvh.
+  // Blend the last part of the canvas to the exact HTML/theme background instead
+  // of exposing a solid, differently colored rectangle at the bottom edge.
+  var bottomFade = vc.createLinearGradient(0, vg.height * 0.76, 0, vg.height);
+  bottomFade.addColorStop(0, 'rgba(18,13,25,0)');
+  bottomFade.addColorStop(1, 'rgba(18,13,25,1)');
+  vc.fillStyle = bottomFade;
+  vc.fillRect(0, vg.height * 0.76, vg.width, vg.height * 0.24);
 }
 
 /* ============ audio ============ */
