@@ -1,5 +1,5 @@
 /* Pinpoint service worker — cache-first app shell */
-var CACHE = 'pinpoint-v1.2.9';
+var CACHE = 'pinpoint-v1.2.10';
 var ASSETS = [
   './',
   './index.html',
